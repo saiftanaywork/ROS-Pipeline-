@@ -1,0 +1,2527 @@
+mkdir dfw-ros
+cd dfw-ros
+git init
+git remote add origin https://github.com/yourusername/dfw-ros.git
+dfw-ros/
+  index.html   (or dfw_ros_v14.html)
+  supabase/
+    migrations/
+      20260703000000_init_schema.sql
+      20260703000001_rls_and_rpc.sql
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFW ROS — Delivery Management</title>
+<style>
+:root {
+  --bg:#f4f6f8;--surface:#fff;--surface-2:#f0f2f5;--border:#e4e7eb;
+  --text:#1a1d21;--text-muted:#6b7280;--text-light:#9ca3af;
+  --accent:#2d6a4f;--accent-hover:#1b4332;--accent-light:rgba(45,106,79,.1);
+  --sidebar:#16213e;--sidebar-muted:#64748b;--sidebar-text:#e2e8f0;
+  --s-active:rgba(64,192,116,.12);--s-active-text:#40c074;
+  --st-active:#2d6a4f;--st-active-bg:#d8f3dc;
+  --st-archived:#495057;--st-archived-bg:#e9ecef;
+  --st-graduated:#1971c2;--st-graduated-bg:#dbe4ff;
+  --st-stale:#c67c0c;--st-stale-bg:#fff3bf;
+  --danger:#c92a2a;--danger-bg:#fff5f5;
+  --warn:#e67700;--warn-bg:#fff3bf;
+  --shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 16px rgba(0,0,0,.1);
+  --r:8px;--r-sm:5px;
+}
+[data-theme=dark]{
+  --bg:#0e0e1a;--surface:#181828;--surface-2:#21213a;--border:#2a2a45;
+  --text:#e2e8f0;--text-muted:#94a3b8;--text-light:#475569;
+  --accent:#40c074;--accent-hover:#2fa35e;--accent-light:rgba(64,192,116,.1);
+  --sidebar:#0a0a18;
+  --st-active-bg:rgba(64,192,116,.15);--st-archived-bg:rgba(100,116,139,.2);
+  --st-graduated-bg:rgba(25,113,194,.2);--st-stale-bg:rgba(198,124,12,.15);
+  --danger-bg:rgba(201,42,42,.15);--warn-bg:rgba(230,119,0,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* Layout */
+.admin-shell{display:flex;min-height:100vh}
+.sidebar{width:236px;background:var(--sidebar);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:100}
+.main{margin-left:236px;flex:1;padding:28px;min-height:100vh}
+.vol-shell{display:none;flex-direction:column;min-height:100vh;background:var(--bg)}
+.vol-shell.show{display:flex}
+
+/* Sidebar */
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+.sb-logo-name{font-size:14px;font-weight:700;color:#e2e8f0}
+.sb-logo-sub{font-size:11px;color:var(--sidebar-muted);margin-top:2px}
+.sb-section{padding:8px;flex:1}
+.sb-label{font-size:10px;font-weight:600;color:var(--sidebar-muted);text-transform:uppercase;letter-spacing:1px;padding:10px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:6px;cursor:pointer;color:var(--sidebar-muted);font-size:13px;transition:all .15s;margin:1px 0;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{color:var(--sidebar-text);background:rgba(255,255,255,.05)}
+.nav-item.active{color:var(--s-active-text);background:var(--s-active);font-weight:500}
+.nav-badge{margin-left:auto;background:var(--warn);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px}
+.sb-footer{padding:14px 8px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:4px}
+.view-switch-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12.5px;font-weight:500;width:100%;transition:all .15s}
+.view-switch-btn.to-vol{background:var(--s-active);color:var(--s-active-text)}
+.view-switch-btn.to-vol:hover{background:rgba(64,192,116,.2)}
+.theme-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;border:none;background:none;color:var(--sidebar-muted);cursor:pointer;font-size:12.5px;width:100%}
+.theme-btn:hover{color:var(--sidebar-text)}
+
+/* Page header */
+.page-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap}
+.page-title{font-size:21px;font-weight:700}
+.page-sub{font-size:13px;color:var(--text-muted);margin-top:3px}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
+.stat-val{font-size:30px;font-weight:700}
+.stat-lbl{font-size:12px;color:var(--text-muted);margin-top:2px}
+.stat-sub{font-size:11px;color:var(--text-light);margin-top:5px}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:22px;overflow-x:auto}
+.tab-btn{padding:10px 18px;font-size:13px;color:var(--text-muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:color .15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* Filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.f-btn{padding:5px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);font-size:12px;cursor:pointer;font-weight:500;transition:all .15s;white-space:nowrap}
+.f-btn:hover{border-color:var(--accent);color:var(--accent)}
+.f-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.f-btn.on-active{background:var(--st-active-bg);color:var(--st-active);border-color:var(--st-active)}
+.f-btn.on-archived{background:var(--st-archived-bg);color:var(--st-archived);border-color:var(--st-archived)}
+.f-btn.on-graduated{background:var(--st-graduated-bg);color:var(--st-graduated);border-color:var(--st-graduated)}
+.f-btn.on-stale{background:var(--st-stale-bg);color:var(--st-stale);border-color:var(--st-stale)}
+.search-box{padding:7px 12px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;min-width:190px}
+.search-box:focus{outline:none;border-color:var(--accent)}
+.ml-auto{margin-left:auto}
+
+/* Table */
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;background:var(--surface);font-size:13px}
+th{background:var(--surface-2);color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface-2)}
+tr.row-archived td{opacity:.6}
+.td-name{font-weight:600}
+.td-note{font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%}
+.b-active{background:var(--st-active-bg);color:var(--st-active)}.b-active::before{background:var(--st-active)}
+.b-archived{background:var(--st-archived-bg);color:var(--st-archived)}.b-archived::before{background:var(--st-archived)}
+.b-graduated{background:var(--st-graduated-bg);color:var(--st-graduated)}.b-graduated::before{background:var(--st-graduated)}
+.b-stale{background:var(--st-stale-bg);color:var(--st-stale);font-size:10px;padding:2px 7px}.b-stale::before{background:var(--st-stale)}
+.b-pending{background:var(--warn-bg);color:var(--warn)}.b-pending::before{background:var(--warn)}
+.chip{display:inline-block;background:var(--surface-2);color:var(--text-muted);font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--border)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r-sm);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-hover)}
+.btn-ghost{background:transparent;color:var(--text-muted)}.btn-ghost:hover{background:var(--surface-2);color:var(--text)}
+.btn-danger{background:var(--danger-bg);color:var(--danger)}.btn-danger:hover{background:var(--danger);color:#fff}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-approve{background:var(--st-active-bg);color:var(--st-active);border:1px solid var(--st-active)}.btn-approve:hover{background:var(--st-active);color:#fff}
+.btn-reject{background:var(--st-archived-bg);color:var(--st-archived);border:1px solid var(--border)}.btn-reject:hover{background:var(--danger);color:#fff}
+
+/* Action dropdown */
+.act-wrap{position:relative;display:inline-block}
+.act-trigger{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 10px;cursor:pointer;font-size:13px;color:var(--text-muted);transition:all .15s}
+.act-trigger:hover{background:var(--border)}
+.act-menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-md);min-width:160px;z-index:300;overflow:hidden;display:none}
+.act-menu.open{display:block}
+.act-item{display:flex;align-items:center;gap:9px;padding:9px 14px;font-size:13px;color:var(--text);cursor:pointer;transition:background .1s;border:none;background:none;width:100%;text-align:left}
+.act-item:hover{background:var(--surface-2)}
+.act-item.danger{color:var(--danger)}.act-item.danger:hover{background:var(--danger-bg)}
+.act-divider{height:1px;background:var(--border);margin:4px 0}
+
+/* Graduation banner */
+.grad-banner{background:var(--st-graduated-bg);border:1px solid var(--st-graduated);border-radius:var(--r);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.grad-banner-text{font-size:13px;color:var(--st-graduated)}
+
+/* ── SESSION BUILDER ── */
+/* Stop editing controls */
+.stop-edit-btn{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 9px;font-size:11px;cursor:pointer;color:var(--text-muted);white-space:nowrap;transition:all .15s}
+.stop-edit-btn:hover{color:var(--accent);border-color:var(--accent)}
+.stop-edit-btn.skp:hover{color:var(--danger);border-color:var(--danger)}
+.reorder-btn{background:none;border:none;cursor:pointer;color:var(--text-light);font-size:11px;padding:2px 3px;border-radius:3px;line-height:1;display:block}
+.reorder-btn:hover{background:var(--surface-2);color:var(--text)}
+.skip-inline{background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r-sm);padding:10px 12px;margin-top:8px}
+.skipped-section{background:var(--surface);border:1px dashed var(--border);border-radius:var(--r);padding:16px 18px;margin-bottom:16px}
+.skipped-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.skipped-row:last-child{border-bottom:none}
+.skipped-name{font-weight:600;flex:1;min-width:0}
+.skipped-reason{font-size:11px;color:var(--text-muted);flex:2;font-style:italic;min-width:0}
+.undo-btn{background:var(--st-active-bg);color:var(--st-active);border:1px solid var(--st-active);border-radius:var(--r-sm);padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap}
+.undo-btn:hover{background:var(--st-active);color:#fff}
+.cluster-edit-bar{display:flex;gap:6px;flex-wrap:wrap;padding:10px 18px;background:var(--surface-2);border-top:1px solid rgba(0,0,0,.06)}
+.session-summary{display:flex;gap:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 20px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.ssv{font-size:20px;font-weight:800}.ssl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+
+.session-controls{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px}
+.session-controls-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.thresh-group{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px;gap:2px}
+.thresh-btn{padding:5px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:none;color:var(--text-muted);font-weight:500;transition:all .15s}
+.thresh-btn.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.session-tip{font-size:12px;color:var(--text-muted);background:var(--surface-2);border-radius:var(--r-sm);padding:8px 12px;border-left:3px solid var(--accent)}
+
+/* Cluster card */
+.cluster-card{border-radius:var(--r);border:2px solid;padding:0;margin-bottom:14px;overflow:hidden;transition:box-shadow .2s}
+.cluster-card:hover{box-shadow:var(--shadow-md)}
+.cluster-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cluster-label{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.cluster-meta{display:flex;gap:10px;font-size:12px;opacity:.75;flex-wrap:wrap}
+.cluster-stops{background:var(--surface);border-top:1px solid rgba(0,0,0,.07)}
+.cluster-stop{display:flex;align-items:flex-start;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);font-size:13px}
+.cluster-stop:last-child{border-bottom:none}
+.stop-seq{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px}
+.stop-detail{flex:1;min-width:0}
+.stop-stop-name{font-weight:600}
+.stop-stop-addr{font-size:12px;color:var(--text-muted);margin-top:1px}
+.stop-stop-note{font-size:11px;margin-top:3px;padding:3px 8px;border-radius:4px;display:inline-block}
+.cluster-footer{padding:12px 18px;background:var(--surface);border-top:1px solid rgba(0,0,0,.07);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vol-input{padding:7px 12px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;min-width:200px}
+.vol-input:focus{outline:none;border-color:var(--accent)}
+.vol-input.has-val{border-color:var(--st-active);background:var(--st-active-bg)}
+.assigned-tag{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:99px;font-size:12px;font-weight:600;background:var(--st-active-bg);color:var(--st-active)}
+/* New volunteer prompt */
+.new-vol-banner{background:var(--st-graduated-bg);border:1px solid var(--st-graduated);border-radius:var(--r);padding:16px 18px;margin-top:16px}
+.new-vol-banner-title{font-size:13px;font-weight:700;color:var(--st-graduated);margin-bottom:10px}
+.new-vol-banner-sub{font-size:12px;color:var(--st-graduated);opacity:.85;margin-bottom:12px}
+.new-vol-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(25,113,194,.12);gap:12px}
+.new-vol-row:last-child{border-bottom:none}
+.new-vol-name{font-size:13px;font-weight:600;color:var(--st-graduated)}
+.new-vol-detail{font-size:12px;color:var(--st-graduated);opacity:.75;margin-top:1px}
+.new-vol-actions{display:flex;gap:6px;flex-shrink:0}
+.btn-add-vol{background:var(--st-graduated);color:#fff;padding:5px 12px;border-radius:var(--r-sm);font-size:12px;font-weight:600;border:none;cursor:pointer}
+.btn-add-vol:hover{opacity:.9}
+.btn-skip-vol{background:none;border:1px solid var(--st-graduated);color:var(--st-graduated);padding:5px 12px;border-radius:var(--r-sm);font-size:12px;cursor:pointer}
+.btn-skip-vol:hover{background:rgba(25,113,194,.1)}
+
+/* Generated links */
+.links-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-top:20px}
+.links-header{font-size:14px;font-weight:700;margin-bottom:4px}
+.links-sub{font-size:12px;color:var(--text-muted);margin-bottom:16px}
+.link-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:8px}
+.link-vol-name{font-weight:700;font-size:13px;white-space:nowrap}
+.link-stops-count{font-size:11px;color:var(--text-muted)}
+.link-url-box{font-family:'SF Mono',Menlo,monospace;font-size:11px;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);padding:6px 10px;border-radius:var(--r-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link-actions{display:flex;gap:6px;flex-shrink:0}
+.whatsapp-btn{background:#25d366;color:#fff;padding:6px 12px;border-radius:var(--r-sm);font-size:12px;font-weight:600;border:none;cursor:pointer;white-space:nowrap}
+.whatsapp-btn:hover{background:#1ebe5d}
+.preview-btn{background:var(--st-graduated-bg);color:var(--st-graduated);padding:6px 12px;border-radius:var(--r-sm);font-size:12px;font-weight:600;border:1px solid var(--st-graduated);cursor:pointer;white-space:nowrap}
+.preview-btn:hover{background:var(--st-graduated);color:#fff}
+.copy-link-btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);padding:6px 10px;border-radius:var(--r-sm);font-size:12px;cursor:pointer}
+.copy-link-btn:hover{background:var(--border)}
+
+/* Pending reviews */
+.edit-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;margin-bottom:12px}
+.edit-card-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:12px}
+.edit-card-name{font-weight:700;font-size:14px}
+.edit-card-meta{font-size:12px;color:var(--text-muted);margin-top:3px}
+.diff-box{background:var(--surface-2);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start}
+.diff-col-lbl{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.diff-old{font-size:13px;color:var(--danger);background:var(--danger-bg);padding:6px 10px;border-radius:var(--r-sm);word-break:break-word}
+.diff-new{font-size:13px;color:var(--st-active);background:var(--st-active-bg);padding:6px 10px;border-radius:var(--r-sm);font-weight:500;word-break:break-word}
+.diff-arrow{font-size:20px;color:var(--text-light);align-self:center;text-align:center}
+.edit-note{font-size:12px;color:var(--text-muted);background:var(--surface-2);padding:8px 12px;border-radius:var(--r-sm);border-left:3px solid var(--accent);margin-bottom:12px}
+.edit-actions{display:flex;gap:8px}
+
+/* Audit log */
+.audit-item{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+.audit-item:last-child{border-bottom:none}
+.audit-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:5px}
+.audit-action{font-size:13px;font-weight:500}
+.audit-detail{font-size:12px;color:var(--text-muted);margin-top:2px}
+.audit-meta{font-size:11px;color:var(--text-light);margin-top:1px}
+
+/* Modals */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--r);width:100%;max-width:500px;box-shadow:var(--shadow-md);max-height:90vh;overflow-y:auto}
+.modal-hd{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:16px;font-weight:700}
+.modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:20px;line-height:1;padding:2px}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.form-input,.form-select,.form-textarea{width:100%;padding:9px 12px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--accent)}
+.form-textarea{resize:vertical;min-height:80px}
+.warning-box{background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;color:var(--st-stale);margin-bottom:16px}
+.info-box{background:var(--st-graduated-bg);border:1px solid var(--st-graduated);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;color:var(--st-graduated);margin-bottom:16px}
+
+/* Volunteer view */
+.vol-hd{background:var(--sidebar);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.vol-hd-title{color:#e2e8f0;font-weight:700;font-size:15px}
+.vol-hd-sub{color:var(--sidebar-muted);font-size:12px;margin-top:2px}
+.vol-progress-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.pb-track{flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden}
+.pb-fill{height:100%;background:var(--accent);border-radius:99px;transition:width .4s}
+.pb-label{font-size:12px;color:var(--text-muted);white-space:nowrap}
+.vol-content{padding:16px;max-width:580px;margin:0 auto;flex:1;overflow-y:auto}
+.vol-banner{background:var(--st-graduated-bg);border-bottom:1px solid var(--st-graduated);padding:10px 20px;font-size:12px;color:var(--st-graduated);display:flex;align-items:center;gap:8px}
+
+/* Stop cards */
+.stop-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+.stop-card.delivered{border-color:var(--st-active);opacity:.8}
+.stop-hd{padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.stop-num{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stop-num.done{background:var(--st-active-bg);color:var(--st-active)}
+.stop-info{flex:1;min-width:0}
+.stop-name{font-weight:600;font-size:14px}
+.stop-addr{font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stop-body{padding:0 16px 16px;border-top:1px solid var(--border);display:none}
+.stop-body.open{display:block;padding-top:14px}
+.detail-row{display:flex;gap:8px;font-size:13px;margin-bottom:7px}
+.detail-lbl{color:var(--text-muted);min-width:90px;flex-shrink:0}
+.notes-box{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:var(--r-sm);padding:10px 12px;font-size:12px;color:var(--text-muted);margin:10px 0}
+.stop-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.map-link{display:inline-flex;align-items:center;gap:5px;color:var(--st-graduated);font-size:12px;font-weight:500;text-decoration:none;padding:6px 12px;border-radius:var(--r-sm);border:1px solid var(--st-graduated-bg);background:var(--st-graduated-bg)}
+.map-link:hover{opacity:.85}
+.suggest-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);padding:6px 12px;border-radius:var(--r-sm);cursor:pointer}
+.suggest-btn:hover{color:var(--accent);border-color:var(--accent)}
+.copy-addr-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);padding:6px 12px;border-radius:var(--r-sm);cursor:pointer}
+.copy-addr-btn:hover{color:var(--st-graduated);border-color:var(--st-graduated)}
+.vol-summary{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:28px 20px;margin-top:8px;text-align:center}
+
+/* Empty state */
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-muted)}
+.empty-icon{font-size:40px;margin-bottom:12px}
+.empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+
+/* Profile overlay */
+.main{position:relative}
+.profile-overlay{display:none;position:absolute;top:0;left:0;right:0;min-height:100%;background:var(--bg);z-index:50;padding:28px;overflow-y:auto}
+.profile-overlay.open{display:block}
+.profile-back{display:inline-flex;align-items:center;gap:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;margin-bottom:20px;border:none;background:none;padding:0}
+.profile-back:hover{color:var(--accent)}
+.profile-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:6px;flex-wrap:wrap}
+.profile-name{font-size:24px;font-weight:800}
+.profile-meta{font-size:13px;color:var(--text-muted);margin-bottom:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+.profile-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px}
+.profile-section-full{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+/* Inline editable field */
+.field-row{margin-bottom:14px}
+.field-row:last-child{margin-bottom:0}
+.field-label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.field-val{font-size:13px;color:var(--text);line-height:1.5}
+.edit-btn{background:none;border:none;cursor:pointer;color:var(--text-light);font-size:12px;padding:2px 4px;border-radius:3px;transition:all .15s}
+.edit-btn:hover{color:var(--accent);background:var(--accent-light)}
+.field-edit-wrap{display:none;gap:6px;align-items:flex-start;flex-direction:column;margin-top:4px}
+.field-edit-wrap.open{display:flex}
+.field-edit-input{width:100%;padding:7px 10px;border-radius:var(--r-sm);border:1px solid var(--accent);background:var(--surface);color:var(--text);font-size:13px}
+.field-edit-input:focus{outline:none}
+.field-edit-actions{display:flex;gap:6px}
+.btn-save-field{padding:5px 12px;border-radius:var(--r-sm);background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:500}
+.btn-save-field:hover{background:var(--accent-hover)}
+.btn-cancel-field{padding:5px 10px;border-radius:var(--r-sm);background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);cursor:pointer;font-size:12px}
+/* Notes timeline */
+.notes-add{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.notes-textarea{width:100%;padding:10px 12px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;resize:vertical;min-height:72px}
+.notes-textarea:focus{outline:none;border-color:var(--accent)}
+.notes-add-footer{display:flex;align-items:center;gap:8px}
+.note-entry{padding:14px 0;border-bottom:1px solid var(--border)}
+.note-entry:last-child{border-bottom:none}
+.note-entry-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.note-author{font-size:12px;font-weight:600;color:var(--text)}
+.note-date{font-size:11px;color:var(--text-light)}
+.note-text{font-size:13px;color:var(--text);line-height:1.6}
+.note-empty{text-align:center;padding:24px;color:var(--text-muted);font-size:13px}
+.packs-calc{display:inline-flex;align-items:center;gap:6px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:99px;font-size:12px;font-weight:700}
+@media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
+
+/* ── Insights ── */
+.ins-section{margin-bottom:28px}
+.ins-section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.ins-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.ins-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;border-left:4px solid var(--border)}
+.ins-card.warn{border-left-color:var(--warn)}
+.ins-card.info{border-left-color:var(--st-graduated)}
+.ins-card.good{border-left-color:var(--st-active)}
+.ins-card.muted{border-left-color:var(--text-light)}
+.ins-count{font-size:32px;font-weight:800;line-height:1;margin-bottom:3px}
+.ins-label{font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:12px}
+.ins-list{border-top:1px solid var(--border);margin-top:10px;padding-top:10px}
+.ins-list-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
+.ins-list-item:last-child{border-bottom:none}
+.ins-list-name{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ins-list-detail{color:var(--text-muted);flex-shrink:0;font-size:11px}
+.ins-link{color:var(--accent);cursor:pointer;font-size:11px;font-weight:600;flex-shrink:0}
+.ins-link:hover{text-decoration:underline}
+/* Progress rows (approaching graduation) */
+.prog-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;margin-bottom:8px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px}
+.prog-info{}
+.prog-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.prog-sub{font-size:11px;color:var(--text-muted)}
+.prog-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:120px}
+.prog-track{width:120px;height:7px;background:var(--border);border-radius:99px;overflow:hidden}
+.prog-fill{height:100%;border-radius:99px;background:var(--accent)}
+.prog-pct{font-size:11px;font-weight:700;color:var(--accent)}
+/* Zone breakdown */
+.zone-breakdown{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.zone-row{display:grid;grid-template-columns:140px 70px 70px 1fr;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px}
+.zone-row:last-child{border-bottom:none}
+.zone-hdr{background:var(--surface-2);font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.zone-bar-track{height:6px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+.zone-bar-fill{height:100%;border-radius:99px;background:var(--accent);transition:width .4s}
+/* Health metrics */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.health-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px}
+.health-val{font-size:28px;font-weight:800;margin-bottom:3px}
+.health-lbl{font-size:12px;color:var(--text-muted)}
+.health-sub{font-size:11px;color:var(--text-light);margin-top:4px}
+/* Empty insight */
+.ins-empty{padding:20px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+
+/* ── Login screen ── */
+.login-screen{position:fixed;inset:0;background:var(--sidebar);display:flex;align-items:center;justify-content:center;z-index:9000;padding:20px}
+.login-card{background:var(--surface);border-radius:12px;padding:40px 44px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px}
+.login-logo-icon{font-size:28px}
+.login-logo-name{font-size:18px;font-weight:800;color:var(--text)}
+.login-logo-sub{font-size:12px;color:var(--text-muted);margin-top:1px}
+.login-title{font-size:22px;font-weight:800;margin-bottom:6px}
+.login-sub{font-size:13px;color:var(--text-muted);margin-bottom:28px}
+.login-field{margin-bottom:16px}
+.login-label{display:block;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px}
+.login-input{width:100%;padding:11px 14px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;transition:border-color .15s}
+.login-input:focus{outline:none;border-color:var(--accent)}
+.login-input.error{border-color:var(--danger)}
+.login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .15s}
+.login-btn:hover{background:var(--accent-hover)}
+.login-btn:disabled{opacity:.6;cursor:not-allowed}
+.login-error{background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--r-sm);padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
+.login-error.show{display:block}
+.login-hint{margin-top:20px;padding:12px 14px;background:var(--surface-2);border-radius:var(--r-sm);font-size:12px;color:var(--text-muted);border:1px solid var(--border)}
+.login-hint strong{color:var(--text)}
+.login-footer{margin-top:24px;text-align:center;font-size:12px;color:var(--text-light)}
+/* Logout button in sidebar */
+.logout-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;border:none;background:none;color:var(--sidebar-muted);cursor:pointer;font-size:12.5px;width:100%;text-align:left;transition:all .15s}
+.logout-btn:hover{color:#ff6b6b;background:rgba(255,107,107,.1)}
+/* User pill in sidebar */
+.sidebar-user{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--s-active);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--s-active-text);flex-shrink:0}
+.user-name{font-size:13px;font-weight:600;color:var(--sidebar-text)}
+.user-role{font-size:11px;color:var(--sidebar-muted)}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow-md);font-size:13px;max-width:300px;display:flex;align-items:center;gap:10px;animation:fadeIn .2s ease}
+.toast.t-success{border-left:3px solid var(--accent)}
+.toast.t-info{border-left:3px solid var(--st-graduated)}
+.toast.t-warn{border-left:3px solid var(--warn)}
+@keyframes fadeIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,1fr)}.link-row{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.sidebar{width:0;overflow:hidden}.main{margin-left:0}}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🌿</div>
+      <div>
+        <div class="login-logo-name">DFW ROS</div>
+        <div class="login-logo-sub">Delivery Management</div>
+      </div>
+    </div>
+
+    <div class="login-title">Admin Sign In</div>
+    <div class="login-sub">Sign in to manage households, routes, and delivery sessions.</div>
+
+    <div class="login-error" id="loginError">Incorrect email or password. Please try again.</div>
+
+    <div class="login-field">
+      <label class="login-label" for="loginEmail">Email</label>
+      <input class="login-input" type="email" id="loginEmail" placeholder="admin@dfwros.org" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label class="login-label" for="loginPassword">Password</label>
+      <input class="login-input" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="login-btn" id="loginBtn" onclick="handleLogin()">Sign In →</button>
+
+    <div class="login-hint">
+      <strong>Demo credentials</strong><br>
+      Email: <strong>admin@dfwros.org</strong><br>
+      Password: <strong>dfwros2024</strong>
+    </div>
+
+    <div class="login-footer">
+      Volunteer? Your coordinator will send you a link — no login needed.
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADMIN SHELL ══ -->
+<div class="admin-shell" id="adminShell">
+  <nav class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-name">🌿 DFW ROS</div>
+      <div class="sb-logo-sub">Delivery Management</div>
+    </div>
+    <div class="sidebar-user" id="sidebarUser">
+      <div class="user-avatar" id="userAvatar">S</div>
+      <div>
+        <div class="user-name" id="userName">Sonicum</div>
+        <div class="user-role">Admin</div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Admin</div>
+      <button class="nav-item active" onclick="showTab('households')"><span>🏠</span> Households</button>
+      <button class="nav-item" onclick="showTab('pending')" id="nav-pending">
+        <span>📝</span> Pending Reviews
+        <span class="nav-badge" id="pendingBadge">3</span>
+      </button>
+      <button class="nav-item" onclick="showTab('insights')"><span>💡</span> Insights</button>
+      <button class="nav-item" onclick="showTab('session')"><span>📦</span> Session Builder</button>
+      <button class="nav-item" onclick="showTab('volunteers')"><span>👥</span> Volunteers</button>
+      <button class="nav-item" onclick="showTab('audit')"><span>📋</span> Audit Log</button>
+    </div>
+    <div class="sb-footer">
+      <button class="view-switch-btn to-vol" onclick="switchView('volunteer')">📦 Switch to Volunteer View</button>
+      <button class="theme-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+      <button class="logout-btn" onclick="handleLogout()">⬡ Sign Out</button>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ── HOUSEHOLDS ── -->
+    <div class="tab-pane active" id="tab-households">
+      <div class="page-hd">
+        <div><div class="page-title">Households</div><div class="page-sub">All registered recipient families across DFW zones</div></div>
+        <button class="btn btn-primary" onclick="openModal('addHousehold')">+ Add Household</button>
+      </div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-filter="all" onclick="setFilter('all',this)">All</button>
+        <button class="f-btn" data-filter="active" onclick="setFilter('active',this)">🟢 Active</button>
+        <button class="f-btn" data-filter="inactive" onclick="setFilter('inactive',this)">⚫ Inactive</button>
+        <button class="f-btn" data-filter="stale" onclick="setFilter('stale',this)">⚠️ Stale</button>
+        <select class="search-box" id="zoneFilter" onchange="renderTable()" style="min-width:130px">
+          <option value="">All Zones</option>
+          <option>North Dallas</option><option>South Dallas</option>
+          <option>Plano/Allen</option><option>Fort Worth</option>
+        </select>
+        <input class="search-box ml-auto" type="text" placeholder="Search…" id="searchBox" oninput="renderTable()" style="max-width:200px">
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Family</th><th>Zone</th><th>Size</th><th>Packs</th><th>Health</th><th>Status</th><th>Last Updated</th><th>Times Served</th><th></th></tr></thead>
+          <tbody id="householdTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PENDING REVIEWS ── -->
+    <div class="tab-pane" id="tab-pending">
+      <div class="page-hd">
+        <div><div class="page-title">Pending Reviews</div><div class="page-sub">Volunteer-suggested corrections — approve to apply, reject to dismiss</div></div>
+      </div>
+      <div id="editCardContainer"></div>
+    </div>
+
+    <!-- ── INSIGHTS ── -->
+    <div class="tab-pane" id="tab-insights">
+      <div class="page-hd">
+        <div><div class="page-title">Insights</div><div class="page-sub">Program health, action items, and trends at a glance</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="renderInsights()">↻ Refresh</button>
+      </div>
+      <div id="insightsContent"></div>
+    </div>
+
+    <!-- ── SESSION BUILDER ── -->
+    <div class="tab-pane" id="tab-session">
+      <div class="page-hd">
+        <div>
+          <div class="page-title">Session Builder</div>
+          <div class="page-sub">Auto-group stops by proximity, assign to volunteers, generate shareable links</div>
+        </div>
+      </div>
+
+      <div class="session-controls">
+        <div class="session-controls-row">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Grouping Radius</div>
+            <div class="thresh-group">
+              <button class="thresh-btn" onclick="setThreshold(0.005,this)">Tight (~0.3 mi)</button>
+              <button class="thresh-btn on" onclick="setThreshold(0.012,this)">Medium (~0.8 mi)</button>
+              <button class="thresh-btn" onclick="setThreshold(0.022,this)">Wide (~1.5 mi)</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Zone</div>
+            <select class="search-box" id="sessionZone" style="min-width:140px">
+              <option value="">All Zones</option>
+              <option>North Dallas</option><option>South Dallas</option>
+              <option>Plano/Allen</option><option>Fort Worth</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-end" onclick="runClustering()">⚡ Auto-Group Stops</button>
+        </div>
+        <div class="session-tip" style="margin-top:14px">
+          💡 The system groups households by how close they are on the map, then sequences the clusters for shortest overall drive. Families in the same apartment complex or street will always land in the same group.
+        </div>
+      </div>
+
+      <div id="clusterGrid"></div>
+
+      <div id="linksSection" style="display:none">
+        <div class="links-section">
+          <div class="links-header">🔗 Volunteer Links</div>
+          <div class="links-sub">Send each link via WhatsApp. Volunteers tap it and see only their assigned stops — no login needed.</div>
+          <div id="linksContainer"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VOLUNTEERS ── -->
+    <div class="tab-pane" id="tab-volunteers">
+      <div class="page-hd">
+        <div><div class="page-title">Volunteers</div><div class="page-sub">Zone assignments and delivery history</div></div>
+        <button class="btn btn-primary">+ Add Volunteer</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Phone</th><th>Zones</th><th>Deliveries</th><th>Last Active</th></tr></thead>
+          <tbody>
+            <tr><td class="td-name">Fatima Al-Sayed</td><td>214-555-1001</td><td><span class="chip">North Dallas</span></td><td>42</td><td>Jun 15, 2024</td></tr>
+            <tr><td class="td-name">Ahmed Khan</td><td>214-555-1002</td><td><span class="chip">North Dallas</span> <span class="chip">Plano/Allen</span></td><td>38</td><td>Jun 15, 2024</td></tr>
+            <tr><td class="td-name">Yusuf Osman</td><td>972-555-1003</td><td><span class="chip">South Dallas</span></td><td>31</td><td>Jun 14, 2024</td></tr>
+            <tr><td class="td-name">Maryam Hassan</td><td>817-555-1004</td><td><span class="chip">Fort Worth</span></td><td>19</td><td>Jun 15, 2024</td></tr>
+            <tr><td class="td-name">Ibrahim Diallo</td><td>214-555-1005</td><td><span class="chip">South Dallas</span></td><td>11</td><td>Jun 8, 2024</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── AUDIT LOG ── -->
+    <div class="tab-pane" id="tab-audit">
+      <div class="page-hd">
+        <div><div class="page-title">Audit Log</div><div class="page-sub">Every change to household data, timestamped</div></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px">
+        <div id="auditContainer"></div>
+      </div>
+    </div>
+
+    <!-- ── PROFILE OVERLAY ── -->
+    <div class="profile-overlay" id="profileOverlay">
+      <button class="profile-back" onclick="closeProfile()">← Back to Households</button>
+      <div id="profileContent"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══ VOLUNTEER SHELL ══ -->
+<div class="vol-shell" id="volShell">
+  <div class="vol-hd">
+    <div>
+      <div class="vol-hd-title" id="volTitle">📦 DFW ROS Deliveries</div>
+      <div class="vol-hd-sub" id="volSubtitle">Your stops for today</div>
+    </div>
+    <button class="view-switch-btn" style="background:rgba(255,255,255,.07);color:#94a3b8;width:auto;padding:8px 14px;font-size:12px" onclick="switchView('admin')">⚙ Admin View</button>
+  </div>
+  <div class="vol-banner" id="volBanner" style="display:none">
+    🔗 You're viewing a volunteer link — only your assigned stops are shown.
+  </div>
+  <div class="vol-progress-bar">
+    <div class="pb-track"><div class="pb-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="pb-label" id="progressLabel">0 / 0 delivered</div>
+  </div>
+  <div class="vol-content" id="volContent"></div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- Remove from Routes -->
+<div class="modal-backdrop" id="modal-remove">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Remove from Routes</div><button class="modal-close" onclick="closeModal('remove')">×</button></div>
+    <div class="modal-body">
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px" id="removeHouseholdName"></div>
+      <div class="form-group">
+        <label class="form-label">Reason</label>
+        <select class="form-select" id="removeReason">
+          <option value="">Select a reason…</option>
+          <optgroup label="✓ Positive outcome">
+            <option value="snap">Received SNAP / food assistance</option>
+            <option value="employment">Found stable employment</option>
+            <option value="self-sufficient">Became self-sufficient</option>
+          </optgroup>
+          <optgroup label="Administrative">
+            <option value="wrong-address">Address is wrong / undeliverable</option>
+            <option value="unresponsive">No contact after multiple attempts</option>
+            <option value="moved">Family has moved</option>
+            <option value="request">Family requested removal</option>
+            <option value="other">Other</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <textarea class="form-textarea" id="removeNotes" placeholder="Any additional context…"></textarea>
+      </div>
+      <div style="background:var(--surface-2);border-radius:var(--r-sm);padding:10px 12px;font-size:12px;color:var(--text-muted)">
+        This family will be removed from delivery routes but kept in the database. They can be restored to active at any time.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('remove')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmRemove()">Remove from Routes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore -->
+<div class="modal-backdrop" id="modal-restore">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Restore to Active</div><button class="modal-close" onclick="closeModal('restore')">×</button></div>
+    <div class="modal-body">
+      <div class="info-box">This will restore the family to active status and include them in upcoming delivery routes.</div>
+      <div style="font-size:14px;font-weight:600" id="restoreHouseholdName"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('restore')">Cancel</button>
+      <button class="btn btn-approve" onclick="confirmRestore()">Restore to Active</button>
+    </div>
+  </div>
+</div>
+
+<!-- Approve edit -->
+<div class="modal-backdrop" id="modal-approve">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Approve Suggested Edit</div><button class="modal-close" onclick="closeModal('approve')">×</button></div>
+    <div class="modal-body">
+      <div class="info-box">Approving will update the household record immediately and log it in the Audit Log.</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px" id="approveHouseholdName"></div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" id="approveFieldLabel"></div>
+      <div class="diff-box">
+        <div><div class="diff-col-lbl">Current</div><div class="diff-old" id="approveOld"></div></div>
+        <div class="diff-arrow">→</div>
+        <div><div class="diff-col-lbl">Will become</div><div class="diff-new" id="approveNew"></div></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('approve')">Cancel</button>
+      <button class="btn btn-approve" onclick="confirmApprove()">Apply Change</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reject edit -->
+<div class="modal-backdrop" id="modal-reject">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Reject Suggested Edit</div><button class="modal-close" onclick="closeModal('reject')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Reason (optional)</label>
+        <textarea class="form-textarea" id="rejectReason" placeholder="e.g. Already verified — current address is correct."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('reject')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmReject()">Reject Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Suggest edit (volunteer) -->
+<div class="modal-backdrop" id="modal-suggest">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">✏ Suggest a Correction</div><button class="modal-close" onclick="closeModal('suggest')">×</button></div>
+    <div class="modal-body">
+      <div class="warning-box" style="font-size:12px">Your suggestion goes to the admin for review — nothing changes until they approve it.</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px" id="suggestHouseholdName"></div>
+      <div class="form-group">
+        <label class="form-label">What needs correcting?</label>
+        <select class="form-select" id="suggestField" onchange="updateCurrentVal()">
+          <option value="">Choose a field…</option>
+          <option value="address">Address</option>
+          <option value="size">Household size</option>
+          <option value="phone">Phone number</option>
+          <option value="notes">Delivery notes / gate code</option>
+          <option value="health">Health / accessibility info</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" id="currentValGroup" style="display:none">
+        <label class="form-label">Currently on record</label>
+        <div style="padding:8px 12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13px;color:var(--text-muted)" id="currentValDisplay"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Correct value / what you observed</label>
+        <textarea class="form-textarea" id="suggestValue" placeholder="Describe what you saw or what the correct value should be…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('suggest')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSuggestion()">Submit for Review</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Household -->
+<div class="modal-backdrop" id="modal-addHousehold">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Add New Household</div><button class="modal-close" onclick="closeModal('addHousehold')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Family Name</label><input class="form-input" id="newName" placeholder="e.g. Al-Hassan Family"></div>
+      <div class="form-group"><label class="form-label">Full Address</label><input class="form-input" id="newAddress" placeholder="123 Main St Apt 4, Dallas TX 75201"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group"><label class="form-label">Zone</label><select class="form-select" id="newZone"><option>North Dallas</option><option>South Dallas</option><option>Plano/Allen</option><option>Fort Worth</option></select></div>
+        <div class="form-group"><label class="form-label">Household Size</label><input class="form-input" id="newSize" type="number" min="1" max="20" value="4"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Health / Accessibility Notes</label><input class="form-input" id="newHealth" placeholder="e.g. Mobility impairment, elderly…"></div>
+      <div class="form-group"><label class="form-label">Dietary Restrictions</label><input class="form-input" id="newDietary" placeholder="e.g. Halal only, no pork…"></div>
+      <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="newPhone" placeholder="214-555-0000"></div>
+      <div class="form-group"><label class="form-label">Delivery Notes</label><textarea class="form-textarea" id="newNotes" placeholder="Gate codes, floor, special instructions…"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addHousehold')">Cancel</button>
+      <button class="btn btn-primary" onclick="addHousehold()">Add Household</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  DATA
+// ════════════════════════════════════════════
+const TODAY = new Date('2024-06-15');
+
+// Coordinates tuned so clusters are obvious in the demo:
+// Al-Hassan & Karimi → very close (same North Dallas area)
+// Okonkwo & Abdullah → very close (same Plano corridor)
+// All others → isolated
+let households = [
+  {id:1, name:'Al-Hassan Family',   address:'1234 Park Ln Apt 201, Dallas TX 75204',     zone:'North Dallas',  size:5, adolescents:2, health:'Mobility impairment (father)',           dietary:'Halal only',         phone:'214-555-0101', deliveryWindow:'9am–12pm',  packs:3, status:'active',   inactiveReason:null, timesServed:18, lastUpdated:'2024-06-15', notes:'Gate code #2847. Ring bell twice.',         lat:32.801, lng:-96.788,
+    visitNotes:[
+      {id:1, text:"Family was home. Father's mobility has noticeably worsened — may want to flag for ground-floor priority in future logistics.",           author:'Admin (Sonicum)', date:'2024-06-15'},
+      {id:2, text:"Mother mentioned the gate code recently changed. Updated in delivery notes.",                                                             author:'Fatima (Volunteer)', date:'2024-06-08'},
+      {id:3, text:"3 children confirmed at home. Mother says a relative may be moving in next month — household size could increase to 6 or 7.",            author:'Admin (Sonicum)', date:'2024-05-25'},
+    ]},
+  {id:2, name:'Okonkwo Family',     address:'589 Maple Ave, Plano TX 75023',              zone:'Plano/Allen',   size:4, adolescents:1, health:'None',                                  dietary:'No pork',            phone:'214-555-0202', deliveryWindow:'10am–1pm',  packs:2, status:'active',   inactiveReason:null, timesServed:7,  lastUpdated:'2024-06-08', notes:'Leave at front door if no answer.',        lat:33.019, lng:-96.699,
+    visitNotes:[
+      {id:1, text:"No one home — left basket at front door as instructed. Called ahead, no answer.",  author:'Ahmed (Volunteer)', date:'2024-06-08'},
+      {id:2, text:"Family was home this week. Father confirmed dietary restriction: no pork.",         author:'Admin (Sonicum)',    date:'2024-05-18'},
+    ]},
+  {id:3, name:'Karimi Family',      address:'2301 Skillman St #44, Dallas TX 75206',      zone:'North Dallas',  size:7, adolescents:3, health:'Elderly grandmother (limited mobility)', dietary:'Halal, low sodium',  phone:'214-555-0303', deliveryWindow:'8am–11am',  packs:4, status:'active',   inactiveReason:null, timesServed:24, lastUpdated:'2024-05-20', notes:'3rd floor, no elevator.',                  lat:32.803, lng:-96.787,
+    visitNotes:[
+      {id:1, text:"Grandmother answered the door. Mentioned unit number may have changed to #48 — confirm next visit.",  author:'Ahmed (Volunteer)', date:'2024-06-15'},
+      {id:2, text:"Low-sodium dietary note added — grandmother is on a restricted diet per doctor's orders.",             author:'Admin (Sonicum)',    date:'2024-04-30'},
+    ]},
+  {id:4, name:'Diallo Family',      address:'4412 Camp Wisdom Rd, Fort Worth TX 76116',   zone:'Fort Worth',    size:3, adolescents:0, health:'None',                                  dietary:'None',               phone:'817-555-0404', deliveryWindow:'11am–2pm',  packs:2, status:'active',   inactiveReason:null, timesServed:5,  lastUpdated:'2024-06-10', notes:'',                                         lat:32.680, lng:-97.430,
+    visitNotes:[]},
+  {id:5, name:'Nguyen Family',      address:'807 Audelia Rd Apt 12B, Dallas TX 75218',    zone:'North Dallas',  size:2, adolescents:0, health:'None',                                  dietary:'No beef',            phone:'214-555-0505', deliveryWindow:'12pm–3pm',  packs:1, status:'inactive', inactiveReason:'employment', timesServed:31, lastUpdated:'2024-05-01', notes:'Graduated — found stable employment.',   lat:32.860, lng:-96.690,
+    visitNotes:[
+      {id:1, text:"Family shared they've both found stable employment. Grateful for the support over the past year. Graduated from the program.",  author:'Admin (Sonicum)', date:'2024-05-01'},
+    ]},
+  {id:6, name:'Rahman Family',      address:'1890 W Commerce St, Dallas TX 75208',        zone:'South Dallas',  size:6, adolescents:4, health:'Mental health (mother)',                dietary:'Halal',              phone:'214-555-0606', deliveryWindow:'9am–12pm',  packs:3, status:'active',   inactiveReason:null, timesServed:12, lastUpdated:'2024-06-14', notes:'Intercom code 306. Call before arriving.', lat:32.748, lng:-96.840,
+    visitNotes:[
+      {id:1, text:"Called ahead — mother requested we ring the intercom first before buzzing. Kids were very excited about the fruit this week.",  author:'Yusuf (Volunteer)', date:'2024-06-14'},
+      {id:2, text:"Two new relatives may have moved in — household size may have increased to 8. Flagged for admin review.",                       author:'Yusuf (Volunteer)', date:'2024-06-07'},
+    ]},
+  {id:7, name:'Morales Family',     address:'3322 S Lamar St, Dallas TX 75215',           zone:'South Dallas',  size:4, adolescents:2, health:'Disability (child, wheelchair)',         dietary:'No tree nuts',       phone:'214-555-0707', deliveryWindow:'10am–1pm',  packs:2, status:'inactive', inactiveReason:'wrong-address', timesServed:3, lastUpdated:'2024-04-12', notes:'Address may be wrong — needs verification.', lat:32.756, lng:-96.792,
+    visitNotes:[
+      {id:1, text:"Went to the address — building exists but family name not on any unit. Attempted to call, no answer. Flagged for admin.",  author:'Ibrahim (Volunteer)', date:'2024-04-12'},
+    ]},
+  {id:8, name:'Abdullah Family',    address:'962 Coit Rd #108, Plano TX 75075',           zone:'Plano/Allen',   size:5, adolescents:2, health:'None',                                  dietary:'Halal, no shellfish', phone:'972-555-0808', deliveryWindow:'9am–12pm',  packs:3, status:'active',  inactiveReason:null, timesServed:9,  lastUpdated:'2024-06-12', notes:'Gate code: #4422.',                        lat:33.021, lng:-96.697,
+    visitNotes:[
+      {id:1, text:"Gate code confirmed working. Family has a new baby — they mentioned needing baby food if ever available.",  author:'Ahmed (Volunteer)', date:'2024-06-12'},
+    ]},
+];
+
+let suggestedEdits = [
+  {id:1, householdId:3, householdName:'Karimi Family',    field:'address', fieldLabel:'Address',        currentValue:'2301 Skillman St #44, Dallas TX 75206', suggestedValue:'2301 Skillman St #48, Dallas TX 75206', note:"They've moved to unit 48, same floor.", submittedBy:'Ahmed (Volunteer)',  submittedAt:'Jun 15 · 10:23 AM', status:'pending'},
+  {id:2, householdId:1, householdName:'Al-Hassan Family', field:'notes',   fieldLabel:'Delivery Notes', currentValue:'Gate code #2847. Ring bell twice.',      suggestedValue:'Gate code changed to #3901. Ring bell twice. New dog in unit — friendly.', note:'', submittedBy:'Fatima (Volunteer)', submittedAt:'Jun 15 · 9:47 AM',  status:'pending'},
+  {id:3, householdId:6, householdName:'Rahman Family',    field:'size',    fieldLabel:'Household Size', currentValue:'6',                                       suggestedValue:'8', note:'Two relatives moved in. Please confirm.',  submittedBy:'Yusuf (Volunteer)',  submittedAt:'Jun 14 · 11:02 AM', status:'pending'},
+];
+
+let auditLog = [
+  {action:'Household graduated',       detail:'Nguyen Family — Found employment',                        user:'Admin (Sonicum)', ts:'Jun 1 · 2:34 PM'},
+  {action:'Suggested edit approved',   detail:'Al-Hassan Family: Address corrected via volunteer',       user:'Admin (Sonicum)', ts:'May 28 · 10:15 AM'},
+  {action:'New household added',       detail:'Diallo Family — Fort Worth zone',                         user:'Admin (Sonicum)', ts:'May 20 · 9:03 AM'},
+  {action:'Household archived',        detail:'Morales Family — wrong address on file',                  user:'Admin (Sonicum)', ts:'Apr 15 · 3:22 PM'},
+  {action:'Record flagged as stale',   detail:'Karimi Family — not updated in 26+ days',                 user:'System',          ts:'Jun 15 · 12:00 AM'},
+];
+
+const VOLUNTEERS = ['Fatima Al-Sayed','Ahmed Khan','Yusuf Osman','Maryam Hassan','Ibrahim Diallo'];
+
+// Cluster colors: [header bg, border, text, dot bg]
+const CLUSTER_PALETTE = [
+  {hbg:'#d8f3dc', bdr:'#2d6a4f', txt:'#1b4332', dot:'#40c074', label:'Cluster A'},
+  {hbg:'#dbe4ff', bdr:'#1971c2', txt:'#1864ab', dot:'#4c6ef5', label:'Cluster B'},
+  {hbg:'#f3d9fa', bdr:'#9c36b5', txt:'#7048a0', dot:'#ae3ec9', label:'Cluster C'},
+  {hbg:'#ffe8cc', bdr:'#e67700', txt:'#c05c00', dot:'#fd7e14', label:'Cluster D'},
+  {hbg:'#fff3bf', bdr:'#e6b800', txt:'#b38600', dot:'#fcc419', label:'Cluster E'},
+  {hbg:'#d3f9d8', bdr:'#2f9e44', txt:'#216032', dot:'#37b24d', label:'Cluster F'},
+];
+
+// ── App state ──
+let activeFilter   = 'all';
+let activeThreshold = 0.012;
+let sessionClusters = [];          // array of arrays of household objects
+let clusterAssignments = {};       // clusterIdx → volunteer name
+let generatedLinks = [];           // [{vol, stopIds, url}]
+let pendingEditId  = null;
+let pendingHouseholdId = null;
+let volStopsData   = [];           // households shown in volunteer view
+let volName        = '';
+let volDelivered   = new Set();
+
+// ════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+function dist(a, b) {
+  return Math.sqrt((a.lat - b.lat) ** 2 + (a.lng - b.lng) ** 2);
+}
+function centroid(cluster) {
+  return {lat: cluster.reduce((s,h)=>s+h.lat,0)/cluster.length,
+          lng: cluster.reduce((s,h)=>s+h.lng,0)/cluster.length};
+}
+function daysSince(dateStr) {
+  return Math.floor((TODAY - new Date(dateStr)) / 86400000);
+}
+function isStale(h) { return daysSince(h.lastUpdated) >= 25 && h.status === 'active'; }
+function packsFor(size) { return Math.max(1, Math.ceil(size / 2)); }
+
+const POSITIVE_REASONS = ['snap','employment','self-sufficient'];
+const REASON_LABELS = {snap:'SNAP',employment:'Employment',moved:'Moved','self-sufficient':'Self-sufficient','wrong-address':'Wrong address',unresponsive:'Unresponsive',request:'Requested removal',other:'Other'};
+
+function isPositiveReason(r) { return POSITIVE_REASONS.includes(r); }
+
+function statusBadge(h) {
+  const stale = isStale(h) ? '<span class="badge b-stale" style="margin-left:4px">Stale</span>' : '';
+  if (h.status === 'active') return `<span class="badge b-active">Active</span>${stale}`;
+  if (h.status === 'inactive') {
+    const lbl = REASON_LABELS[h.inactiveReason] || 'Inactive';
+    if (isPositiveReason(h.inactiveReason)) {
+      return `<span class="badge b-graduated">Inactive · ${lbl}</span>`;
+    }
+    return `<span class="badge b-archived">Inactive · ${lbl}</span>`;
+  }
+  return '';
+}
+
+function fmt(dateStr) {
+  const days = daysSince(dateStr);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7)  return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function toast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = `toast t-${type}`;
+  t.innerHTML = msg;
+  $('toastWrap').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ════════════════════════════════════════════
+//  CLUSTERING ALGORITHM
+// ════════════════════════════════════════════
+
+// 1. Group by proximity (connected-components style):
+//    Any two houses within `threshold` degrees of each other are in the same cluster.
+//    Clusters can grow transitively — if A is near B, and B is near C, all three cluster.
+function clusterByProximity(houses, threshold) {
+  const assigned = new Set();
+  const clusters = [];
+
+  for (const h of houses) {
+    if (assigned.has(h.id)) continue;
+    const cluster = [h];
+    assigned.add(h.id);
+
+    // Expand cluster greedily (transitive — catches apartment-complex chains)
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const candidate of houses) {
+        if (assigned.has(candidate.id)) continue;
+        const nearAnyCurrent = cluster.some(m => dist(m, candidate) <= threshold);
+        if (nearAnyCurrent) {
+          cluster.push(candidate);
+          assigned.add(candidate.id);
+          grew = true;
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+// 2. Sort stops within each cluster (nearest-neighbor from first stop)
+function sortWithinCluster(cluster) {
+  if (cluster.length <= 1) return cluster;
+  const result = [cluster[0]];
+  let remaining = cluster.slice(1);
+  while (remaining.length) {
+    const cur = result[result.length - 1];
+    const nearest = remaining.reduce((a, b) => dist(cur, a) < dist(cur, b) ? a : b);
+    result.push(nearest);
+    remaining = remaining.filter(h => h.id !== nearest.id);
+  }
+  return result;
+}
+
+// 3. Sequence clusters by centroid proximity (nearest-neighbor)
+function sequenceClusters(clusters) {
+  if (clusters.length <= 1) return clusters;
+  // Start from cluster with most stops
+  const sorted = [];
+  let remaining = clusters.map((c, i) => ({idx: i, c}));
+  let cur = remaining.reduce((a, b) => a.c.length >= b.c.length ? a : b);
+  sorted.push(cur.c);
+  remaining = remaining.filter(x => x !== cur);
+  let curC = cur.c;
+
+  while (remaining.length) {
+    const ctr = centroid(curC);
+    const nearest = remaining.reduce((a, b) =>
+      dist(ctr, centroid(a.c)) < dist(ctr, centroid(b.c)) ? a : b
+    );
+    sorted.push(nearest.c);
+    curC = nearest.c;
+    remaining = remaining.filter(x => x !== nearest);
+  }
+  return sorted;
+}
+
+// ════════════════════════════════════════════
+//  MODALS
+// ════════════════════════════════════════════
+function openModal(id)  { $(`modal-${id}`).classList.add('open'); }
+function closeModal(id) { $(`modal-${id}`).classList.remove('open'); }
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', e => { if (e.target === b) b.classList.remove('open'); });
+});
+
+// ════════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════════
+function showTab(id) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  $(`tab-${id}`).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') === `showTab('${id}')`) n.classList.add('active');
+  });
+  if (id === 'pending')  renderPending();
+  if (id === 'audit')    renderAudit();
+  if (id === 'insights') renderInsights();
+}
+
+// ════════════════════════════════════════════
+//  VIEW SWITCH
+// ════════════════════════════════════════════
+function switchView(v) {
+  if (v === 'volunteer') {
+    $('adminShell').style.display = 'none';
+    $('volShell').classList.add('show');
+    renderVolunteer();
+  } else {
+    $('adminShell').style.display = 'flex';
+    $('volShell').classList.remove('show');
+    renderAll();
+  }
+}
+
+// ════════════════════════════════════════════
+//  HOUSEHOLDS TABLE
+// ════════════════════════════════════════════
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('on','on-active','on-archived','on-graduated','on-stale'));
+  const map = {all:'on', active:'on-active', inactive:'on-archived', stale:'on-stale'};
+  btn.classList.add(map[f] || 'on');
+  renderTable();
+}
+
+function renderTable() {
+  const search = $('searchBox').value.toLowerCase();
+  const zone   = $('zoneFilter').value;
+
+  const rows = households.filter(h => {
+    if (activeFilter === 'active'   && h.status !== 'active')   return false;
+    if (activeFilter === 'inactive' && h.status !== 'inactive') return false;
+    if (activeFilter === 'stale'    && !isStale(h))             return false;
+    if (zone   && h.zone   !== zone)   return false;
+    if (search && !h.name.toLowerCase().includes(search) && !h.address.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (!rows.length) {
+    $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No households match this filter.</td></tr>`;
+    return;
+  }
+
+  $('householdTbody').innerHTML = rows.map(h => `
+    <tr class="${h.status==='inactive'?'row-archived':''}">
+      <td>
+        <div class="td-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id})">${h.name}</div>
+        ${h.notes ? `<div class="td-note" title="${h.notes}">📌 ${h.notes}</div>` : ''}
+      </td>
+      <td><span class="chip">${h.zone}</span></td>
+      <td>${h.size} people<br><span style="font-size:11px;color:var(--text-muted)">${h.adolescents} adolescents</span></td>
+      <td><strong>${packsFor(h.size)}</strong></td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:160px">${h.health||'—'}</td>
+      <td>${statusBadge(h)}</td>
+      <td style="font-size:12px;color:${isStale(h)?'var(--st-stale)':'var(--text-muted)'}">${fmt(h.lastUpdated)}</td>
+      <td style="font-size:13px">${h.timesServed}${h.timesServed>=20&&h.status==='active'?' 🎓':''}</td>
+      <td>
+        <div class="act-wrap">
+          <button class="act-trigger" onclick="toggleMenu(${h.id})">⋯</button>
+          <div class="act-menu" id="menu-${h.id}">
+            ${h.status === 'active' ? `
+              <button class="act-item" onclick="closeMenus();openRemove(${h.id})">🚫 Remove from Routes</button>
+            ` : `
+              <button class="act-item" onclick="closeMenus();openRestore(${h.id})">↩ Restore to Active</button>
+            `}
+            <div class="act-divider"></div>
+            <button class="act-item danger" onclick="closeMenus()">🗑 Delete</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function toggleMenu(id) { closeMenus(); $(`menu-${id}`).classList.toggle('open'); }
+function closeMenus()   { document.querySelectorAll('.act-menu.open').forEach(m => m.classList.remove('open')); }
+document.addEventListener('click', e => { if (!e.target.closest('.act-wrap')) closeMenus(); });
+
+function renderStats() {
+  const active    = households.filter(h => h.status==='active').length;
+  const pending   = suggestedEdits.filter(e => e.status==='pending').length;
+  const stale     = households.filter(h => isStale(h)).length;
+  const inactive  = households.filter(h => h.status==='inactive');
+  const graduated = inactive.filter(h => isPositiveReason(h.inactiveReason)).length;
+  const archived  = inactive.filter(h => !isPositiveReason(h.inactiveReason)).length;
+  $('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-val" style="color:var(--st-active)">${active}</div><div class="stat-lbl">Active Households</div><div class="stat-sub">${graduated} graduated · ${archived} archived</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--warn)">${pending}</div><div class="stat-lbl">Pending Reviews</div><div class="stat-sub">Volunteer suggestions</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--st-stale)">${stale}</div><div class="stat-lbl">Stale Records</div><div class="stat-sub">25+ days since update</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--st-graduated)">${graduated}</div><div class="stat-lbl">Graduated</div><div class="stat-sub">Positive outcome</div></div>
+  `;
+  const badge = $('pendingBadge');
+  badge.textContent = pending;
+  badge.style.display = pending ? '' : 'none';
+}
+
+function renderInsights() {
+  const active    = households.filter(h => h.status === 'active');
+  const inactive  = households.filter(h => h.status === 'inactive');
+  const stale     = active.filter(h => isStale(h));
+  const pending   = suggestedEdits.filter(e => e.status === 'pending');
+  const graduated = inactive.filter(h => isPositiveReason(h.inactiveReason));
+
+  // Graduation candidates: active, 20+ deliveries
+  const gradCandidates = active.filter(h => h.timesServed >= 20)
+    .sort((a,b) => b.timesServed - a.timesServed);
+
+  // Approaching: active, 12–19 deliveries
+  const approaching = active.filter(h => h.timesServed >= 12 && h.timesServed < 20)
+    .sort((a,b) => b.timesServed - a.timesServed);
+
+  // Zone breakdown
+  const zones = ['North Dallas','South Dallas','Plano/Allen','Fort Worth'];
+  const zoneData = zones.map(z => {
+    const zHouseholds = active.filter(h => h.zone === z);
+    return {zone:z, count:zHouseholds.length, packs:zHouseholds.reduce((s,h)=>s+packsFor(h.size),0)};
+  }).filter(z => z.count > 0);
+  const maxPacks = Math.max(...zoneData.map(z => z.packs), 1);
+
+  // Program health
+  const totalDeliveries  = households.reduce((s,h) => s+h.timesServed, 0);
+  const totalPacks       = active.reduce((s,h) => s+packsFor(h.size), 0);
+  const avgDeliveries    = active.length ? Math.round(active.reduce((s,h)=>s+h.timesServed,0)/active.length) : 0;
+  const dataQuality      = inactive.filter(h => h.inactiveReason==='wrong-address');
+
+  $('insightsContent').innerHTML = `
+
+    <!-- ── ACTION NEEDED ── -->
+    <div class="ins-section">
+      <div class="ins-section-title">⚡ Action Needed</div>
+      <div class="ins-action-grid">
+
+        <!-- Graduation candidates -->
+        <div class="ins-card ${gradCandidates.length>0?'warn':'good'}">
+          <div class="ins-count" style="color:${gradCandidates.length>0?'var(--warn)':'var(--st-active)'}">${gradCandidates.length}</div>
+          <div class="ins-label">Graduation Candidate${gradCandidates.length!==1?'s':''}</div>
+          ${gradCandidates.length > 0 ? `
+            <div class="ins-list">
+              ${gradCandidates.slice(0,4).map(h=>`
+                <div class="ins-list-item">
+                  <span class="ins-list-name">${h.name}</span>
+                  <span class="ins-list-detail">${h.timesServed} deliveries</span>
+                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
+                </div>
+              `).join('')}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">These families may be ready to move on. Review their profiles and consider removing from routes.</div>
+          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No families overdue for review.</div>`}
+        </div>
+
+        <!-- Stale records -->
+        <div class="ins-card ${stale.length>0?'warn':'good'}">
+          <div class="ins-count" style="color:${stale.length>0?'var(--st-stale)':'var(--st-active)'}">${stale.length}</div>
+          <div class="ins-label">Stale Record${stale.length!==1?'s':''}</div>
+          ${stale.length > 0 ? `
+            <div class="ins-list">
+              ${stale.slice(0,4).map(h=>`
+                <div class="ins-list-item">
+                  <span class="ins-list-name">${h.name}</span>
+                  <span class="ins-list-detail">${daysSince(h.lastUpdated)}d ago</span>
+                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
+                </div>
+              `).join('')}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">Records not updated in 25+ days. Verify these families are still at the same address.</div>
+          ` : `<div style="font-size:12px;color:var(--st-active)">✓ All records are current.</div>`}
+        </div>
+
+        <!-- Pending reviews -->
+        <div class="ins-card ${pending.length>0?'info':'good'}">
+          <div class="ins-count" style="color:${pending.length>0?'var(--st-graduated)':'var(--st-active)'}">${pending.length}</div>
+          <div class="ins-label">Pending Review${pending.length!==1?'s':''}</div>
+          ${pending.length > 0 ? `
+            <div class="ins-list">
+              ${pending.slice(0,4).map(e=>`
+                <div class="ins-list-item">
+                  <span class="ins-list-name">${e.householdName}</span>
+                  <span class="ins-list-detail">${e.fieldLabel}</span>
+                </div>
+              `).join('')}
+            </div>
+            <button class="btn btn-sm" style="margin-top:10px;background:var(--st-graduated-bg);color:var(--st-graduated);border:1px solid var(--st-graduated)" onclick="showTab('pending')">Review All →</button>
+          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No volunteer suggestions waiting.</div>`}
+        </div>
+
+        <!-- Data quality -->
+        <div class="ins-card ${dataQuality.length>0?'warn':'good'}">
+          <div class="ins-count" style="color:${dataQuality.length>0?'var(--danger)':'var(--st-active)'}">${dataQuality.length}</div>
+          <div class="ins-label">Address Problem${dataQuality.length!==1?'s':''}</div>
+          ${dataQuality.length > 0 ? `
+            <div class="ins-list">
+              ${dataQuality.slice(0,4).map(h=>`
+                <div class="ins-list-item">
+                  <span class="ins-list-name">${h.name}</span>
+                  <span class="ins-list-detail">${h.zone}</span>
+                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
+                </div>
+              `).join('')}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">Inactive families flagged for wrong address. Reach out to verify before restoring.</div>
+          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No address issues flagged.</div>`}
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── ZONE BREAKDOWN ── -->
+    <div class="ins-section">
+      <div class="ins-section-title">📍 Zone Breakdown — This Week</div>
+      ${zoneData.length ? `
+        <div class="zone-breakdown">
+          <div class="zone-row zone-hdr">
+            <div>Zone</div><div>Families</div><div>Packs</div><div>Load</div>
+          </div>
+          ${zoneData.map(z=>`
+            <div class="zone-row">
+              <div style="font-weight:600">${z.zone}</div>
+              <div style="color:var(--text-muted)">${z.count}</div>
+              <div style="font-weight:700">${z.packs}</div>
+              <div class="zone-bar-track">
+                <div class="zone-bar-fill" style="width:${Math.round(z.packs/maxPacks*100)}%"></div>
+              </div>
+            </div>
+          `).join('')}
+          <div class="zone-row" style="background:var(--surface-2)">
+            <div style="font-weight:700;color:var(--text)">Total</div>
+            <div style="font-weight:700">${active.length}</div>
+            <div style="font-weight:800;color:var(--accent)">${totalPacks}</div>
+            <div></div>
+          </div>
+        </div>
+      ` : '<div class="ins-empty">No active households to display.</div>'}
+    </div>
+
+    <!-- ── APPROACHING GRADUATION ── -->
+    <div class="ins-section">
+      <div class="ins-section-title">🎯 Approaching Graduation <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">(12–19 deliveries)</span></div>
+      ${approaching.length ? approaching.map(h => {
+        const pct = Math.round(h.timesServed / 20 * 100);
+        return `
+          <div class="prog-card">
+            <div class="prog-info">
+              <div class="prog-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id});showTab('households')">${h.name}</div>
+              <div class="prog-sub">${h.zone} · ${h.size} people · ${h.timesServed} of 20 deliveries</div>
+            </div>
+            <div class="prog-right">
+              <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+              <div class="prog-pct">${pct}%</div>
+            </div>
+          </div>
+        `;
+      }).join('') : '<div class="ins-empty">No families in the 12–19 delivery range right now.</div>'}
+    </div>
+
+    <!-- ── PROGRAM HEALTH ── -->
+    <div class="ins-section">
+      <div class="ins-section-title">📊 Program Health</div>
+      <div class="health-grid">
+        <div class="health-card">
+          <div class="health-val" style="color:var(--st-active)">${active.length}</div>
+          <div class="health-lbl">Active Families</div>
+          <div class="health-sub">${totalPacks} packs needed this week</div>
+        </div>
+        <div class="health-card">
+          <div class="health-val" style="color:var(--st-graduated)">${graduated.length}</div>
+          <div class="health-lbl">Families Graduated</div>
+          <div class="health-sub">Positive outcomes since start</div>
+        </div>
+        <div class="health-card">
+          <div class="health-val">${totalDeliveries.toLocaleString()}</div>
+          <div class="health-lbl">Total Deliveries</div>
+          <div class="health-sub">Across all families ever served</div>
+        </div>
+        <div class="health-card">
+          <div class="health-val">${avgDeliveries}</div>
+          <div class="health-lbl">Avg Deliveries / Family</div>
+          <div class="health-sub">Among currently active families</div>
+        </div>
+        <div class="health-card">
+          <div class="health-val">${households.length}</div>
+          <div class="health-lbl">Total Families on Record</div>
+          <div class="health-sub">Active, inactive, and graduated</div>
+        </div>
+        <div class="health-card">
+          <div class="health-val">${graduated.length && households.filter(h=>h.status==='inactive').length ? Math.round(graduated.length/households.filter(h=>h.status==='inactive').length*100) : 0}%</div>
+          <div class="health-lbl">Graduation Rate</div>
+          <div class="health-sub">Of all families who left the program</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderGradBanner() { /* Moved to Insights tab */ }
+
+// ── Graduate / Archive / Restore ──
+function openRemove(id) {
+  pendingHouseholdId = id;
+  $('removeHouseholdName').textContent = households.find(h => h.id===id).name;
+  $('removeReason').value = '';
+  $('removeNotes').value = '';
+  openModal('remove');
+}
+function confirmRemove() {
+  if (!$('removeReason').value) { toast('⚠️ Please select a reason.','warn'); return; }
+  const h = households.find(x => x.id===pendingHouseholdId);
+  h.status = 'inactive';
+  h.inactiveReason = $('removeReason').value;
+  const note = $('removeNotes').value;
+  if (note) h.notes = note;
+  const positive = isPositiveReason(h.inactiveReason);
+  const reasonText = $('removeReason').options[$('removeReason').selectedIndex].text;
+  auditLog.unshift({action: positive ? 'Family graduated' : 'Family archived', detail:`${h.name} — ${reasonText}`, user:'Admin', ts:'Just now'});
+  closeModal('remove');
+  if (profileHouseholdId === h.id) renderProfile();
+  renderAll();
+  toast(positive ? `🎓 ${h.name} graduated.` : `📦 ${h.name} marked inactive.`, 'info');
+}
+
+function openRestore(id) {
+  pendingHouseholdId = id;
+  $('restoreHouseholdName').textContent = households.find(h => h.id===id).name;
+  openModal('restore');
+}
+function confirmRestore() {
+  const h = households.find(x => x.id===pendingHouseholdId);
+  h.status = 'active'; h.inactiveReason = null;
+  auditLog.unshift({action:'Household restored', detail:`${h.name} returned to active`, user:'Admin', ts:'Just now'});
+  closeModal('restore');
+  if (profileHouseholdId === h.id) renderProfile();
+  renderAll();
+  toast(`↩ ${h.name} restored to active.`,'info');
+}
+
+function addHousehold() {
+  const name = $('newName').value.trim();
+  const addr = $('newAddress').value.trim();
+  if (!name || !addr) { toast('⚠️ Name and address are required.','warn'); return; }
+  const h = {
+    id: Date.now(), name, address: addr,
+    zone: $('newZone').value, size: parseInt($('newSize').value)||4,
+    adolescents:0, health:$('newHealth').value, dietary:$('newDietary').value,
+    phone:$('newPhone').value, packs:2, status:'active', inactiveReason:null,
+    timesServed:0, lastUpdated:'2024-06-15', notes:$('newNotes').value,
+    lat:32.78, lng:-96.80
+  };
+  households.push(h);
+  auditLog.unshift({action:'New household added', detail:`${h.name} — ${h.zone}`, user:'Admin', ts:'Just now'});
+  closeModal('addHousehold'); renderAll(); toast(`🏠 ${h.name} added.`);
+}
+
+// ════════════════════════════════════════════
+//  PENDING REVIEWS
+// ════════════════════════════════════════════
+function renderPending() {
+  const pending = suggestedEdits.filter(e => e.status==='pending');
+  if (!pending.length) {
+    $('editCardContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div style="color:var(--text-muted);font-size:13px">No pending suggestions right now.</div></div>`;
+    return;
+  }
+  $('editCardContainer').innerHTML = pending.map(e => `
+    <div class="edit-card">
+      <div class="edit-card-hd">
+        <div>
+          <div class="edit-card-name">${e.householdName} <span class="badge b-pending" style="vertical-align:middle">${e.fieldLabel}</span></div>
+          <div class="edit-card-meta">Submitted by ${e.submittedBy} · ${e.submittedAt}</div>
+        </div>
+      </div>
+      <div class="diff-box">
+        <div><div class="diff-col-lbl">Current on record</div><div class="diff-old">${e.currentValue}</div></div>
+        <div class="diff-arrow">→</div>
+        <div><div class="diff-col-lbl">Suggested change</div><div class="diff-new">${e.suggestedValue}</div></div>
+      </div>
+      ${e.note ? `<div class="edit-note">💬 "${e.note}"</div>` : ''}
+      <div class="edit-actions">
+        <button class="btn btn-approve" onclick="openApprove(${e.id})">✓ Approve & Apply</button>
+        <button class="btn btn-reject"  onclick="openReject(${e.id})">✕ Reject</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openApprove(editId) {
+  pendingEditId = editId;
+  const e = suggestedEdits.find(x => x.id===editId);
+  $('approveHouseholdName').textContent = e.householdName;
+  $('approveFieldLabel').textContent     = e.fieldLabel;
+  $('approveOld').textContent            = e.currentValue;
+  $('approveNew').textContent            = e.suggestedValue;
+  openModal('approve');
+}
+function confirmApprove() {
+  const e = suggestedEdits.find(x => x.id===pendingEditId);
+  const h = households.find(x => x.id===e.householdId);
+  if (h) {
+    const map = {address:'address',size:'size',phone:'phone',notes:'notes',health:'health',other:'notes'};
+    h[map[e.field]||'notes'] = e.field==='size' ? parseInt(e.suggestedValue) : e.suggestedValue;
+    h.lastUpdated = '2024-06-15';
+  }
+  e.status = 'approved';
+  auditLog.unshift({action:'Suggested edit approved', detail:`${e.householdName}: ${e.fieldLabel} updated`, user:'Admin', ts:'Just now'});
+  closeModal('approve'); renderAll(); renderPending(); toast(`✓ Applied to ${e.householdName}.`);
+}
+
+function openReject(editId) {
+  pendingEditId = editId;
+  $('rejectReason').value = '';
+  openModal('reject');
+}
+function confirmReject() {
+  const e = suggestedEdits.find(x => x.id===pendingEditId);
+  e.status = 'rejected';
+  auditLog.unshift({action:'Suggested edit rejected', detail:`${e.householdName}: ${e.fieldLabel} dismissed`, user:'Admin', ts:'Just now'});
+  closeModal('reject'); renderAll(); renderPending(); toast(`Suggestion rejected.`,'info');
+}
+
+// ════════════════════════════════════════════
+//  AUDIT LOG
+// ════════════════════════════════════════════
+function renderAudit() {
+  $('auditContainer').innerHTML = auditLog.map(a => `
+    <div class="audit-item">
+      <div class="audit-dot"></div>
+      <div>
+        <div class="audit-action">${a.action}</div>
+        <div class="audit-detail">${a.detail}</div>
+        <div class="audit-meta">${a.user} · ${a.ts}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════
+//  SESSION BUILDER
+// ════════════════════════════════════════════
+function setThreshold(val, btn) {
+  activeThreshold = val;
+  document.querySelectorAll('.thresh-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  // Re-run if already built
+  if (sessionClusters.length) runClustering();
+}
+
+function runClustering() {
+  const zone = $('sessionZone').value;
+  const pool = households.filter(h => h.status==='active' && (zone ? h.zone===zone : true));
+
+  if (!pool.length) {
+    $('clusterGrid').innerHTML = `<div class="empty-state"><div class="empty-icon">🏠</div><div class="empty-title">No active households${zone?' in '+zone:''}.</div></div>`;
+    $('linksSection').style.display = 'none';
+    return;
+  }
+
+  const raw = clusterByProximity(pool, activeThreshold);
+  const sequenced = sequenceClusters(raw);
+  sessionClusters = sequenced.map(c => sortWithinCluster(c));
+  clusterAssignments = {};
+  generatedLinks = [];
+  skippedStops = [];
+  skipFormOpen = null;
+  $('linksSection').style.display = 'none';
+
+  renderClusterCards();
+  toast(`⚡ ${pool.length} stops grouped into ${sessionClusters.length} cluster${sessionClusters.length>1?'s':''}.`);
+}
+
+// ── Stop editing state ──
+let skippedStops  = [];   // [{household, reason}]
+let skipFormOpen  = null; // household id with skip form open
+
+// ── Helpers ──
+function getUnassignedHouseholds() {
+  const inSession = new Set(sessionClusters.flat().map(h => h.id));
+  const skipped   = new Set(skippedStops.map(s => s.household.id));
+  return households.filter(h => h.status==='active' && !inSession.has(h.id) && !skipped.has(h.id));
+}
+
+function invalidateLinks() {
+  generatedLinks = [];
+  $('linksSection').style.display = 'none';
+}
+
+// ── Editing operations ──
+function moveStopUp(hid, cidx) {
+  const c = sessionClusters[cidx];
+  const i = c.findIndex(h => h.id===hid);
+  if (i <= 0) return;
+  [c[i-1], c[i]] = [c[i], c[i-1]];
+  invalidateLinks(); renderClusterCards();
+}
+
+function moveStopDown(hid, cidx) {
+  const c = sessionClusters[cidx];
+  const i = c.findIndex(h => h.id===hid);
+  if (i >= c.length-1) return;
+  [c[i], c[i+1]] = [c[i+1], c[i]];
+  invalidateLinks(); renderClusterCards();
+}
+
+function moveStop(hid, fromIdx, toIdx) {
+  // Preserve assignments before index shift
+  const assignments = {};
+  sessionClusters.forEach((_,i) => { assignments[i] = clusterAssignments[i] || ''; });
+
+  const h = sessionClusters[fromIdx].find(x => x.id===hid);
+  sessionClusters[fromIdx] = sessionClusters[fromIdx].filter(x => x.id!==hid);
+  sessionClusters[toIdx].push(h);
+
+  // Remove now-empty clusters and rebuild assignments
+  const removed = [];
+  sessionClusters = sessionClusters.filter((c,i) => {
+    if (c.length===0) { removed.push(i); return false; }
+    return true;
+  });
+  clusterAssignments = {};
+  // Re-map surviving cluster assignments
+  let newIdx = 0;
+  for (let i=0; i<sessionClusters.length+removed.length; i++) {
+    if (!removed.includes(i)) {
+      clusterAssignments[newIdx++] = assignments[i] || '';
+    }
+  }
+
+  closeMenus(); invalidateLinks(); renderClusterCards();
+  toast(`Stop moved.`, 'info');
+}
+
+function toggleSkipForm(hid) {
+  skipFormOpen = skipFormOpen===hid ? null : hid;
+  renderClusterCards();
+}
+
+function skipStop(hid, cidx) {
+  const reasonEl = $(`skip-reason-${hid}`);
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+  const h = sessionClusters[cidx].find(x => x.id===hid);
+  skippedStops.push({household:h, reason: reason||'No reason given'});
+  sessionClusters[cidx] = sessionClusters[cidx].filter(x => x.id!==hid);
+  if (sessionClusters[cidx].length===0) sessionClusters.splice(cidx,1);
+  skipFormOpen = null;
+  invalidateLinks(); renderClusterCards();
+  toast(`${h.name} skipped this week.`, 'info');
+}
+
+function unskipStop(hid) {
+  const entry = skippedStops.find(s => s.household.id===hid);
+  if (!entry) return;
+  skippedStops = skippedStops.filter(s => s.household.id!==hid);
+  sessionClusters.push([entry.household]);
+  invalidateLinks(); renderClusterCards();
+  toast(`${entry.household.name} added back to session.`);
+}
+
+function splitCluster(cidx) {
+  const c = sessionClusters[cidx];
+  if (c.length < 2) return;
+  const mid = Math.ceil(c.length/2);
+  const a = c.slice(0, mid);
+  const b = c.slice(mid);
+  sessionClusters.splice(cidx, 1, a, b);
+  closeMenus(); invalidateLinks(); renderClusterCards();
+  toast(`Cluster split into two groups.`);
+}
+
+function mergeClusters(fromIdx, toIdx) {
+  const combined = sortWithinCluster([...sessionClusters[toIdx], ...sessionClusters[fromIdx]]);
+  sessionClusters[toIdx] = combined;
+  sessionClusters.splice(fromIdx, 1);
+  // Rebuild assignments after splice
+  const old = {...clusterAssignments};
+  clusterAssignments = {};
+  let newI = 0;
+  for (let i=0; i<Object.keys(old).length+1; i++) {
+    if (i!==fromIdx) clusterAssignments[newI++] = old[i]||'';
+  }
+  closeMenus(); invalidateLinks(); renderClusterCards();
+  toast(`Clusters merged.`);
+}
+
+function addStopToCluster(hid, cidx) {
+  const h = households.find(x => x.id===hid);
+  if (!h) return;
+  sessionClusters[cidx].push(h);
+  closeMenus(); invalidateLinks(); renderClusterCards();
+  toast(`${h.name} added.`);
+}
+
+// ── Main render ──
+function renderClusterCards() {
+  const allStops  = sessionClusters.flat();
+  const totalPacks = allStops.reduce((s,h) => s+packsFor(h.size), 0);
+  const unassigned = getUnassignedHouseholds();
+
+  let html = '';
+
+  // Session summary bar
+  html += `
+    <div class="session-summary">
+      <div><div class="ssv">${allStops.length}</div><div class="ssl">Stops</div></div>
+      <div style="width:1px;background:var(--border);align-self:stretch"></div>
+      <div><div class="ssv">${sessionClusters.length}</div><div class="ssl">Clusters</div></div>
+      <div style="width:1px;background:var(--border);align-self:stretch"></div>
+      <div><div class="ssv" style="color:var(--accent)">${totalPacks}</div><div class="ssl">Total Packs</div></div>
+      <div style="width:1px;background:var(--border);align-self:stretch"></div>
+      <div><div class="ssv" style="color:var(--warn)">${skippedStops.length}</div><div class="ssl">Skipped</div></div>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary" onclick="generateLinks()">🔗 Generate Volunteer Links</button>
+      </div>
+    </div>
+  `;
+
+  // Skipped stops section
+  if (skippedStops.length) {
+    html += `
+      <div class="skipped-section">
+        <div style="font-size:12px;font-weight:700;color:var(--st-stale);margin-bottom:10px">⏭ Skipped This Week (${skippedStops.length})</div>
+        ${skippedStops.map(s => `
+          <div class="skipped-row">
+            <span class="skipped-name">${s.household.name}</span>
+            <span class="skipped-reason">"${s.reason}"</span>
+            <button class="undo-btn" onclick="unskipStop(${s.household.id})">↩ Add Back</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Cluster cards
+  html += sessionClusters.map((cluster, idx) => {
+    const col = CLUSTER_PALETTE[idx % CLUSTER_PALETTE.length];
+    const clusterPacks = cluster.reduce((s,h) => s+packsFor(h.size), 0);
+    const zones = [...new Set(cluster.map(h => h.zone))].join(', ');
+    const assigned = clusterAssignments[idx] || '';
+
+    // Build move-to options for each stop
+    const otherClusters = sessionClusters
+      .map((c,ci) => ci!==idx ? {ci, col:CLUSTER_PALETTE[ci%CLUSTER_PALETTE.length]} : null)
+      .filter(Boolean);
+
+    return `
+      <div class="cluster-card" style="border-color:${col.bdr}">
+
+        <!-- Header -->
+        <div class="cluster-header" style="background:${col.hbg}">
+          <div>
+            <div class="cluster-label" style="color:${col.txt}">
+              <span style="width:10px;height:10px;border-radius:50%;background:${col.dot};display:inline-block"></span>
+              ${col.label}
+            </div>
+            <div class="cluster-meta" style="color:${col.txt}">
+              <span>📍 ${zones}</span>
+              <span>· ${cluster.length} stop${cluster.length>1?'s':''}</span>
+              <span>· ${clusterPacks} packs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stops -->
+        <div class="cluster-stops">
+          ${cluster.map((h, si) => `
+            <div class="cluster-stop" style="align-items:flex-start;gap:8px;padding:10px 18px">
+
+              <!-- Reorder -->
+              <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;padding-top:2px">
+                <button class="reorder-btn" onclick="moveStopUp(${h.id},${idx})" ${si===0?'disabled':''} title="Move up">▲</button>
+                <button class="reorder-btn" onclick="moveStopDown(${h.id},${idx})" ${si===cluster.length-1?'disabled':''} title="Move down">▼</button>
+              </div>
+
+              <!-- Number -->
+              <div class="stop-seq" style="background:${col.hbg};color:${col.txt};flex-shrink:0">${si+1}</div>
+
+              <!-- Info -->
+              <div class="stop-detail" style="flex:1;min-width:0">
+                <div class="stop-stop-name">${h.name}</div>
+                <div class="stop-stop-addr">${h.address}</div>
+                ${h.notes?`<span class="stop-stop-note" style="background:${col.hbg};color:${col.txt}">📌 ${h.notes}</span>`:''}
+                ${isStale(h)?`<span class="badge b-stale" style="margin-top:3px">Stale — verify address</span>`:''}
+
+                <!-- Skip form (inline) -->
+                ${skipFormOpen===h.id?`
+                  <div class="skip-inline">
+                    <div style="font-size:11px;font-weight:600;color:var(--st-stale);margin-bottom:6px">Why are you skipping this stop?</div>
+                    <textarea id="skip-reason-${h.id}" style="width:100%;padding:7px 10px;border-radius:var(--r-sm);border:1px solid var(--warn);background:var(--surface);color:var(--text);font-size:12px;resize:none;min-height:52px" placeholder="e.g. Family called ahead, travelling this week…"></textarea>
+                    <div style="display:flex;gap:6px;margin-top:8px">
+                      <button onclick="skipStop(${h.id},${idx})" style="background:var(--warn);color:#fff;border:none;padding:5px 12px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;font-weight:500">Confirm Skip</button>
+                      <button onclick="toggleSkipForm(${h.id})" style="background:var(--surface-2);border:1px solid var(--border);padding:5px 10px;border-radius:var(--r-sm);font-size:12px;cursor:pointer;color:var(--text-muted)">Cancel</button>
+                    </div>
+                  </div>
+                `:''}
+              </div>
+
+              <!-- Packs -->
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:13px;font-weight:700">${packsFor(h.size)} packs</div>
+                <div style="font-size:11px;color:var(--text-muted)">${h.size} people</div>
+              </div>
+
+              <!-- Controls -->
+              <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+                ${otherClusters.length ? `
+                  <div class="act-wrap">
+                    <button class="stop-edit-btn" onclick="toggleMenu('mv-${h.id}')">Move →</button>
+                    <div class="act-menu" id="menu-mv-${h.id}">
+                      ${otherClusters.map(o=>`
+                        <button class="act-item" onclick="moveStop(${h.id},${idx},${o.ci})">
+                          <span style="color:${o.col.dot}">●</span> ${o.col.label}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+                <button class="stop-edit-btn skp" onclick="toggleSkipForm(${h.id})">${skipFormOpen===h.id?'Cancel':'Skip ✕'}</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Edit toolbar (split / merge / add) -->
+        <div class="cluster-edit-bar">
+          <!-- Add stop -->
+          <div class="act-wrap">
+            <button class="stop-edit-btn" onclick="toggleMenu('add-${idx}')">+ Add Stop</button>
+            <div class="act-menu" id="menu-add-${idx}" style="min-width:230px;max-height:220px;overflow-y:auto">
+              ${unassigned.length ? unassigned.map(h=>`
+                <button class="act-item" onclick="addStopToCluster(${h.id},${idx})">
+                  <div>
+                    <div style="font-weight:600;font-size:13px">${h.name}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${h.zone} · ${h.size} people</div>
+                  </div>
+                </button>
+              `).join('') : '<div style="padding:12px 14px;font-size:12px;color:var(--text-muted)">All active stops are in the session.</div>'}
+            </div>
+          </div>
+
+          ${cluster.length >= 4 ? `
+            <button class="stop-edit-btn" onclick="splitCluster(${idx})" title="Split this cluster in half">✂ Split</button>
+          ` : ''}
+
+          ${sessionClusters.length > 1 ? `
+            <div class="act-wrap">
+              <button class="stop-edit-btn" onclick="toggleMenu('mrg-${idx}')">Merge with ▾</button>
+              <div class="act-menu" id="menu-mrg-${idx}">
+                ${sessionClusters.map((c,ci) => ci!==idx ? `
+                  <button class="act-item" onclick="mergeClusters(${idx},${ci})">
+                    <span style="color:${CLUSTER_PALETTE[ci%CLUSTER_PALETTE.length].dot}">●</span>
+                    ${CLUSTER_PALETTE[ci%CLUSTER_PALETTE.length].label} (${c.length} stop${c.length>1?'s':''})
+                  </button>
+                ` : '').join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Volunteer assignment -->
+        <div class="cluster-footer" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Assign to volunteer</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%">
+            <input type="text" class="vol-input${assigned?' has-val':''}" id="assign-${idx}" list="roster-${idx}"
+              placeholder="Type any name, or pick from roster…" value="${assigned}"
+              oninput="onAssignInput(${idx},this)">
+            <datalist id="roster-${idx}">${VOLUNTEERS.map(v=>`<option value="${v}">`).join('')}</datalist>
+            ${assigned?`<span class="assigned-tag">✓ ${assigned.split(' ')[0]}</span>`:''}
+          </div>
+          ${assigned && !VOLUNTEERS.includes(assigned)?`<div style="font-size:11px;color:var(--st-stale)">⚠ Not in roster — link still works.</div>`:''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  $('clusterGrid').innerHTML = html;
+}
+
+
+// Called on every keystroke in the cluster assignment input
+function onAssignInput(idx, el) {
+  clusterAssignments[idx] = el.value.trim();
+  // Live highlight: green border if filled, also re-render the stale warning
+  el.className = 'vol-input' + (el.value.trim() ? ' has-val' : '');
+}
+
+function generateLinks() {
+  // Sync any assignments not yet captured by oninput
+  sessionClusters.forEach((_, idx) => {
+    const el = $(`assign-${idx}`);
+    if (el) clusterAssignments[idx] = el.value.trim();
+  });
+
+  const unassigned = sessionClusters.filter((_, idx) => !clusterAssignments[idx]);
+  if (unassigned.length) {
+    toast(`⚠️ ${unassigned.length} cluster${unassigned.length>1?'s':''} still unassigned.`, 'warn');
+    return;
+  }
+
+  // Build one entry per volunteer (one vol can have multiple clusters)
+  const byVol = {};
+  sessionClusters.forEach((cluster, idx) => {
+    const vol = clusterAssignments[idx];
+    if (!byVol[vol]) byVol[vol] = [];
+    byVol[vol].push(...cluster);
+  });
+
+  const base = window.location.href.split('?')[0];
+  generatedLinks = Object.entries(byVol).map(([vol, stops]) => {
+    const ids  = stops.map(h => h.id).join(',');
+    const url  = `${base}?vol=${encodeURIComponent(vol)}&stops=${ids}&date=20240615`;
+    const isNew = !VOLUNTEERS.includes(vol);
+    return {vol, stops, ids, url, isNew};
+  });
+
+  auditLog.unshift({
+    action: 'Delivery session created',
+    detail: `${sessionClusters.flat().length} stops across ${generatedLinks.length} volunteer${generatedLinks.length>1?'s':''}`,
+    user: 'Admin', ts: 'Just now'
+  });
+
+  $('linksSection').style.display = '';
+  renderLinks();
+  toast(`🔗 ${generatedLinks.length} link${generatedLinks.length>1?'s':''} generated.`);
+}
+
+function renderLinks() {
+  const newVols = generatedLinks.filter(l => l.isNew);
+
+  $('linksContainer').innerHTML = generatedLinks.map((lnk, i) => `
+    <div class="link-row">
+      <div>
+        <div class="link-vol-name">
+          ${lnk.vol}
+          ${lnk.isNew ? '<span style="font-size:10px;background:var(--warn-bg);color:var(--warn);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">New</span>' : ''}
+        </div>
+        <div class="link-stops-count">${lnk.stops.length} stop${lnk.stops.length>1?'s':''} · ${lnk.stops.reduce((s,h)=>s+packsFor(h.size),0)} packs</div>
+      </div>
+      <div class="link-url-box" title="${lnk.url}">${lnk.url}</div>
+      <div class="link-actions">
+        <button class="copy-link-btn" onclick="copyLink('${lnk.url.replace(/'/g,"\\'")}')">📋 Copy</button>
+        <button class="whatsapp-btn" onclick="sendWhatsApp('${encodeURIComponent(lnk.vol)}','${lnk.url.replace(/'/g,"\\'")}')">WhatsApp</button>
+        <button class="preview-btn" onclick="previewVolLink(${i})">👁 Preview</button>
+      </div>
+    </div>
+  `).join('');
+
+  // New-volunteer add-to-roster prompt
+  if (newVols.length) {
+    $('linksContainer').innerHTML += `
+      <div class="new-vol-banner" id="newVolBanner">
+        <div class="new-vol-banner-title">👋 New volunteers this week</div>
+        <div class="new-vol-banner-sub">These names aren't in your roster yet. Add them to track their delivery history over time — or skip and they stay one-time for now.</div>
+        ${newVols.map(l => `
+          <div class="new-vol-row" id="newvolrow-${CSS.escape(l.vol)}">
+            <div>
+              <div class="new-vol-name">${l.vol}</div>
+              <div class="new-vol-detail">${l.stops.length} stop${l.stops.length>1?'s':''} this session</div>
+            </div>
+            <div class="new-vol-actions">
+              <button class="btn-add-vol" onclick="addVolToRoster('${l.vol.replace(/'/g,"\\'")}')">+ Add to Roster</button>
+              <button class="btn-skip-vol" onclick="skipNewVol('${l.vol.replace(/'/g,"\\'")}')">Skip</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+}
+
+function addVolToRoster(name) {
+  if (!VOLUNTEERS.includes(name)) {
+    VOLUNTEERS.push(name);
+    auditLog.unshift({action:'Volunteer added to roster', detail:name, user:'Admin', ts:'Just now'});
+    renderStats();
+  }
+  // Remove from banner
+  const row = document.getElementById(`newvolrow-${CSS.escape(name)}`);
+  if (row) {
+    row.style.opacity = '0.4';
+    row.style.pointerEvents = 'none';
+    row.querySelector('.new-vol-actions').innerHTML = '<span style="font-size:12px;color:var(--st-active);font-weight:600">✓ Added to roster</span>';
+  }
+  // Update the link badge
+  generatedLinks.forEach(l => { if (l.vol === name) l.isNew = false; });
+  toast(`✓ ${name} added to volunteer roster.`);
+}
+
+function skipNewVol(name) {
+  const row = document.getElementById(`newvolrow-${CSS.escape(name)}`);
+  if (row) row.remove();
+  // If banner is now empty, hide it
+  const banner = $('newVolBanner');
+  if (banner && !banner.querySelector('.new-vol-row')) banner.remove();
+}
+
+function copyLink(url) {
+  navigator.clipboard.writeText(url).then(() => toast('📋 Link copied to clipboard.'));
+}
+
+function sendWhatsApp(vol, url) {
+  const msg = encodeURIComponent(`Salaam! Here are your DFW ROS delivery stops for Saturday. Tap the link to see your list:\n${url}`);
+  window.open(`https://wa.me/?text=${msg}`, '_blank');
+}
+
+function previewVolLink(linkIdx) {
+  const lnk = generatedLinks[linkIdx];
+  volStopsData = lnk.stops;
+  volName = lnk.vol;
+  volDelivered = new Set();
+  $('volBanner').style.display = '';
+  switchView('volunteer');
+}
+
+// ════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════
+
+// Demo credentials — replace with Supabase Auth in production
+const ADMIN_ACCOUNTS = [
+  { email: 'admin@dfwros.org', password: 'dfwros2024', name: 'Sonicum', initials: 'S' },
+];
+
+let currentUser = null;
+
+function handleLogin() {
+  const email    = $('loginEmail').value.trim().toLowerCase();
+  const password = $('loginPassword').value;
+  const errEl    = $('loginError');
+  const btn      = $('loginBtn');
+
+  errEl.classList.remove('show');
+  $('loginEmail').classList.remove('error');
+  $('loginPassword').classList.remove('error');
+
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  // Simulate async auth (swap for supabase.auth.signInWithPassword in prod)
+  setTimeout(() => {
+    const match = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
+    if (match) {
+      currentUser = match;
+      sessionStorage.setItem('dfwros_user', JSON.stringify(match));
+      enterAdmin();
+    } else {
+      errEl.textContent = 'Incorrect email or password.';
+      errEl.classList.add('show');
+      $('loginEmail').classList.add('error');
+      $('loginPassword').classList.add('error');
+      btn.disabled = false;
+      btn.textContent = 'Sign In →';
+    }
+  }, 600);
+}
+
+function enterAdmin() {
+  // Update sidebar user info
+  $('userName').textContent    = currentUser.name;
+  $('userAvatar').textContent  = currentUser.initials;
+
+  // Hide login, show admin
+  $('loginScreen').style.display  = 'none';
+  $('adminShell').style.display   = 'flex';
+
+  renderAll();
+  toast(`Welcome back, ${currentUser.name}! 👋`);
+}
+
+function handleLogout() {
+  currentUser = null;
+  sessionStorage.removeItem('dfwros_user');
+  $('adminShell').style.display  = 'none';
+  $('volShell').classList.remove('show');
+  $('loginScreen').style.display = 'flex';
+  $('loginEmail').value    = '';
+  $('loginPassword').value = '';
+  $('loginError').classList.remove('show');
+  $('loginBtn').disabled   = false;
+  $('loginBtn').textContent = 'Sign In →';
+}
+
+// Allow Enter key to submit login form
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && $('loginScreen').style.display !== 'none') handleLogin();
+});
+
+
+function parseURLOnLoad() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const vol   = params.get('vol');
+    const stops = params.get('stops');
+    if (!vol || !stops) return;
+
+    const ids = stops.split(',').map(Number);
+    const matched = households.filter(h => ids.includes(h.id));
+    // Preserve order from URL
+    volStopsData = ids.map(id => matched.find(h => h.id===id)).filter(Boolean);
+    volName = decodeURIComponent(vol);
+    volDelivered = new Set();
+    $('volBanner').style.display = '';
+    $('adminShell').style.display = 'none';
+    $('volShell').classList.add('show');
+    renderVolunteer();
+  } catch(e) { /* no params — normal admin load */ }
+}
+
+// ════════════════════════════════════════════
+//  VOLUNTEER VIEW
+// ════════════════════════════════════════════
+function renderVolunteer() {
+  // If no stops set via link, default to North Dallas active stops (demo)
+  if (!volStopsData.length) {
+    volStopsData = households.filter(h => h.status==='active' && h.zone==='North Dallas').slice(0,4);
+    volName = 'Volunteer';
+  }
+  $('volTitle').textContent = `📦 DFW ROS — ${volName.split(' ')[0]}'s Stops`;
+  $('volSubtitle').textContent = `Saturday Jun 15 · ${volStopsData.length} stops`;
+
+  const total = volStopsData.length;
+  const done  = volDelivered.size;
+  const pct   = total ? Math.round(done/total*100) : 0;
+  $('progressFill').style.width  = pct + '%';
+  $('progressLabel').textContent = `${done} / ${total} delivered`;
+
+  $('volContent').innerHTML = volStopsData.map((h, i) => {
+    const delivered = volDelivered.has(h.id);
+    return `
+      <div class="stop-card ${delivered?'delivered':''}" id="vcard-${h.id}">
+        <div class="stop-hd" onclick="toggleStop(${h.id})">
+          <div class="stop-num ${delivered?'done':''}">${delivered ? '✓' : i+1}</div>
+          <div class="stop-info">
+            <div class="stop-name">${h.name}${delivered?' <span style="color:var(--st-active);font-size:12px;font-weight:500">· Delivered</span>':''}</div>
+            <div class="stop-addr">${h.address}</div>
+          </div>
+          <span style="color:var(--text-light);font-size:18px;transition:transform .2s" id="chev-${h.id}">›</span>
+        </div>
+        <div class="stop-body" id="sbody-${h.id}">
+          <div class="detail-row"><span class="detail-lbl">📦 Packs</span><strong>${packsFor(h.size)}</strong></div>
+          <div class="detail-row"><span class="detail-lbl">👥 Household</span>${h.size} people, ${h.adolescents} adolescents</div>
+          <div class="detail-row"><span class="detail-lbl">🍽 Dietary</span>${h.dietary||'None listed'}</div>
+          ${h.health&&h.health!=='None'?`<div class="detail-row"><span class="detail-lbl">🏥 Health</span>${h.health}</div>`:''}
+          ${h.notes ? `<div class="notes-box">📌 ${h.notes}</div>` : ''}
+          <div class="stop-actions">
+            ${!delivered ? `<button class="btn btn-primary btn-sm" onclick="markDelivered(${h.id})">✓ Mark Delivered</button>` : ''}
+            <a class="map-link" href="https://maps.google.com/?q=${encodeURIComponent(h.address)}" target="_blank">🗺 Open in Maps</a>
+            <button class="copy-addr-btn" onclick="copyAddr('${h.address.replace(/'/g,"\\'")}')">📋 Copy Address</button>
+            <button class="suggest-btn" onclick="openSuggest(${h.id})">✏ Suggest Edit</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (done === total && total > 0) {
+    $('volContent').innerHTML += `
+      <div class="vol-summary">
+        <div style="font-size:36px;margin-bottom:10px">🎉</div>
+        <div style="font-size:17px;font-weight:700;margin-bottom:4px">All deliveries complete!</div>
+        <div style="font-size:13px;color:var(--text-muted)">JazakAllah khair — great work today, ${volName.split(' ')[0]}.</div>
+      </div>
+    `;
+  }
+}
+
+function toggleStop(id) {
+  const body = $(`sbody-${id}`);
+  const chev = $(`chev-${id}`);
+  body.classList.toggle('open');
+  chev.style.transform = body.classList.contains('open') ? 'rotate(90deg)' : '';
+}
+
+function markDelivered(id) {
+  volDelivered.add(id);
+  auditLog.unshift({action:'Delivery confirmed', detail:`${volStopsData.find(h=>h.id===id)?.name} marked delivered`, user:volName||'Volunteer', ts:'Just now'});
+  renderVolunteer();
+  toast('✓ Delivery recorded.');
+}
+
+function copyAddr(addr) {
+  navigator.clipboard.writeText(addr).then(() => toast('📋 Address copied.'));
+}
+
+// ── Suggest edit ──
+let suggestHid = null;
+function openSuggest(hid) {
+  suggestHid = hid;
+  $('suggestHouseholdName').textContent = households.find(h => h.id===hid).name;
+  $('suggestField').value = '';
+  $('suggestValue').value = '';
+  $('currentValGroup').style.display = 'none';
+  openModal('suggest');
+}
+
+function updateCurrentVal() {
+  const f = $('suggestField').value;
+  const h = households.find(x => x.id===suggestHid);
+  if (!f || !h) { $('currentValGroup').style.display='none'; return; }
+  const map = {address:h.address, size:String(h.size), phone:h.phone, notes:h.notes||'(none)', health:h.health||'(none)', other:''};
+  const val = map[f];
+  if (val !== undefined && val !== '') {
+    $('currentValGroup').style.display = 'block';
+    $('currentValDisplay').textContent = val;
+  } else {
+    $('currentValGroup').style.display = 'none';
+  }
+}
+
+function submitSuggestion() {
+  const f = $('suggestField').value;
+  const v = $('suggestValue').value.trim();
+  if (!f || !v) { toast('⚠️ Select a field and describe the correction.','warn'); return; }
+  const h = households.find(x => x.id===suggestHid);
+  const labels = {address:'Address',size:'Household Size',phone:'Phone Number',notes:'Delivery Notes',health:'Health Info',other:'Other'};
+  const vals   = {address:h.address,size:String(h.size),phone:h.phone,notes:h.notes,health:h.health,other:''};
+  suggestedEdits.push({
+    id:Date.now(), householdId:h.id, householdName:h.name,
+    field:f, fieldLabel:labels[f],
+    currentValue:vals[f]||'—', suggestedValue:v, note:'',
+    submittedBy:volName||'Volunteer', submittedAt:'Just now', status:'pending'
+  });
+  renderStats();
+  closeModal('suggest');
+  toast('✏ Suggestion submitted — admin will review.','info');
+}
+
+// ════════════════════════════════════════════
+//  THEME
+// ════════════════════════════════════════════
+function toggleTheme() {
+  document.documentElement.dataset.theme =
+    document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+
+// ════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════
+// ════════════════════════════════════════════
+//  HOUSEHOLD PROFILE
+// ════════════════════════════════════════════
+let profileHouseholdId = null;
+
+function showProfile(id) {
+  profileHouseholdId = id;
+  $('profileOverlay').classList.add('open');
+  renderProfile();
+  $('profileOverlay').scrollTop = 0;
+}
+
+function closeProfile() {
+  $('profileOverlay').classList.remove('open');
+  profileHouseholdId = null;
+}
+
+function renderProfile() {
+  const h = households.find(x => x.id === profileHouseholdId);
+  if (!h) return;
+
+  const days = daysSince(h.lastUpdated);
+  const lastUpdatedStr = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`;
+  const gradReasons = {snap:'SNAP benefits',employment:'Found employment',moved:'Moved',['self-sufficient']:'Self-sufficient',other:'Other'};
+
+  $('profileContent').innerHTML = `
+    <div class="profile-hd">
+      <div>
+        <div class="profile-name">${h.name}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${statusBadge(h)}
+        ${h.status === 'active' ? `
+          <div class="act-wrap">
+            <button class="act-trigger" onclick="toggleMenu('prof-act')">⋯ Actions</button>
+            <div class="act-menu" id="menu-prof-act">
+              <button class="act-item" onclick="closeMenus();openRemove(${h.id})">🚫 Remove from Routes</button>
+            </div>
+          </div>
+        ` : `
+          <button class="btn btn-sm btn-approve" onclick="openRestore(${h.id})">↩ Restore</button>
+        `}
+      </div>
+    </div>
+    <div class="profile-meta">
+      <span>📍 ${h.zone}</span>
+      <span>·</span>
+      <span>📦 ${h.timesServed} deliveries</span>
+      <span>·</span>
+      <span style="color:${isStale(h)?'var(--st-stale)':'inherit'}">Updated ${lastUpdatedStr}</span>
+      ${h.status === 'graduated' && h.inactiveReason ? `<span>· Graduated: ${gradReasons[h.inactiveReason]||h.inactiveReason}</span>` : ''}
+    </div>
+
+    <div class="profile-grid">
+      <!-- Left column -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="profile-section">
+          <div class="section-title">Contact & Location</div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Address
+              <button class="edit-btn" onclick="toggleFieldEdit('address')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-address">${h.address}</div>
+            <div class="field-edit-wrap" id="fedit-address">
+              <input class="field-edit-input" id="finput-address" value="${h.address}" placeholder="Full address…">
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('address')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('address')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Phone
+              <button class="edit-btn" onclick="toggleFieldEdit('phone')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-phone">${h.phone || '—'}</div>
+            <div class="field-edit-wrap" id="fedit-phone">
+              <input class="field-edit-input" id="finput-phone" value="${h.phone||''}" placeholder="Phone number…">
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('phone')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('phone')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Delivery Window
+              <button class="edit-btn" onclick="toggleFieldEdit('deliveryWindow')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-deliveryWindow">${h.deliveryWindow || '—'}</div>
+            <div class="field-edit-wrap" id="fedit-deliveryWindow">
+              <input class="field-edit-input" id="finput-deliveryWindow" value="${h.deliveryWindow||''}" placeholder="e.g. 9am–12pm">
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('deliveryWindow')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('deliveryWindow')">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <div class="section-title">Delivery Notes</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Gate codes, access instructions, special directions</div>
+          <div class="field-row">
+            <div class="field-label">
+              Notes
+              <button class="edit-btn" onclick="toggleFieldEdit('notes')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-notes" style="font-style:${h.notes?'normal':'italic'};color:${h.notes?'var(--text)':'var(--text-light)'}">
+              ${h.notes || 'No delivery notes yet.'}
+            </div>
+            <div class="field-edit-wrap" id="fedit-notes">
+              <textarea class="field-edit-input" id="finput-notes" style="min-height:80px;resize:vertical" placeholder="Gate codes, floor, access instructions…">${h.notes||''}</textarea>
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('notes')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('notes')">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="profile-section">
+          <div class="section-title">Household Details</div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Household Size
+              <button class="edit-btn" onclick="toggleFieldEdit('size')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-size">
+              ${h.size} people &nbsp;·&nbsp; ${h.adolescents} adolescents
+              &nbsp;<span class="packs-calc">📦 ${packsFor(h.size)} packs</span>
+            </div>
+            <div class="field-edit-wrap" id="fedit-size">
+              <div style="display:flex;gap:10px;align-items:center;width:100%">
+                <div style="flex:1">
+                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total people</div>
+                  <input class="field-edit-input" id="finput-size" type="number" min="1" max="20" value="${h.size}">
+                </div>
+                <div style="flex:1">
+                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Adolescents</div>
+                  <input class="field-edit-input" id="finput-adolescents" type="number" min="0" max="20" value="${h.adolescents}">
+                </div>
+              </div>
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('size')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('size')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Zone</div>
+            <div class="field-val"><span class="chip">${h.zone}</span></div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">Times Served</div>
+            <div class="field-val">${h.timesServed} deliveries ${h.timesServed>=20?' 🎓':''}</div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <div class="section-title">Health & Dietary</div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Health / Accessibility
+              <button class="edit-btn" onclick="toggleFieldEdit('health')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-health" style="color:${h.health&&h.health!=='None'?'var(--text)':'var(--text-muted)'}">
+              ${h.health || 'None noted'}
+            </div>
+            <div class="field-edit-wrap" id="fedit-health">
+              <input class="field-edit-input" id="finput-health" value="${h.health||''}" placeholder="e.g. Mobility impairment, elderly, disability…">
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('health')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('health')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              Dietary Restrictions
+              <button class="edit-btn" onclick="toggleFieldEdit('dietary')">✏ Edit</button>
+            </div>
+            <div class="field-val" id="fval-dietary" style="color:${h.dietary&&h.dietary!=='None'?'var(--text)':'var(--text-muted)'}">
+              ${h.dietary || 'None noted'}
+            </div>
+            <div class="field-edit-wrap" id="fedit-dietary">
+              <input class="field-edit-input" id="finput-dietary" value="${h.dietary||''}" placeholder="e.g. Halal, no pork, no shellfish…">
+              <div class="field-edit-actions">
+                <button class="btn-save-field" onclick="saveField('dietary')">Save</button>
+                <button class="btn-cancel-field" onclick="toggleFieldEdit('dietary')">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visit notes full width -->
+    <div class="profile-section-full">
+      <div class="section-title">Visit Notes</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Per-visit observations from admin and volunteers. These stay private — volunteers can suggest edits but can't see each other's notes.</div>
+
+      <div class="notes-add">
+        <textarea class="notes-textarea" id="newNoteText" placeholder="Add a note about this week's delivery — household changes, observations, anything worth remembering…"></textarea>
+        <div class="notes-add-footer">
+          <button class="btn btn-primary btn-sm" onclick="addVisitNote()">+ Add Note</button>
+          <span style="font-size:11px;color:var(--text-muted)">Admin (Sonicum)</span>
+        </div>
+      </div>
+
+      <div id="notesList">
+        ${renderNotesList(h)}
+      </div>
+    </div>
+  `;
+}
+
+function renderNotesList(h) {
+  if (!h.visitNotes || !h.visitNotes.length) {
+    return `<div class="note-empty">No visit notes yet — add one above after each delivery.</div>`;
+  }
+  return [...h.visitNotes].reverse().map(n => `
+    <div class="note-entry" id="note-${n.id}">
+      <div class="note-entry-hd">
+        <div class="note-author">${n.author}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="note-date">${n.date}</div>
+          <button onclick="deleteNote(${n.id})" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px" title="Delete note">✕</button>
+        </div>
+      </div>
+      <div class="note-text">${n.text}</div>
+    </div>
+  `).join('');
+}
+
+function toggleFieldEdit(field) {
+  const wrap = $(`fedit-${field}`);
+  const isOpen = wrap.classList.contains('open');
+  // Close all open field edits first
+  document.querySelectorAll('.field-edit-wrap.open').forEach(w => w.classList.remove('open'));
+  if (!isOpen) {
+    wrap.classList.add('open');
+    const input = $(`finput-${field}`);
+    if (input) setTimeout(() => input.focus(), 50);
+  }
+}
+
+function saveField(field) {
+  const h = households.find(x => x.id === profileHouseholdId);
+  if (!h) return;
+
+  if (field === 'size') {
+    const newSize = parseInt($('finput-size').value) || h.size;
+    const newAdolescents = parseInt($('finput-adolescents').value) || 0;
+    h.size = newSize;
+    h.adolescents = newAdolescents;
+    h.lastUpdated = '2024-06-15';
+    auditLog.unshift({action:'Field updated', detail:`${h.name}: Household size → ${newSize} people, ${newAdolescents} adolescents`, user:'Admin', ts:'Just now'});
+    $('fedit-size').classList.remove('open');
+    renderProfile();
+    renderAll();
+    toast('✓ Household size updated.');
+    return;
+  }
+
+  const input = $(`finput-${field}`);
+  if (!input) return;
+  const val = input.value.trim();
+  const old = h[field];
+  h[field] = val;
+  h.lastUpdated = '2024-06-15';
+  const labels = {address:'Address',phone:'Phone',deliveryWindow:'Delivery window',notes:'Delivery notes',health:'Health info',dietary:'Dietary restrictions'};
+  auditLog.unshift({action:'Field updated', detail:`${h.name}: ${labels[field]||field} updated`, user:'Admin', ts:'Just now'});
+  $(`fedit-${field}`).classList.remove('open');
+  // Update displayed value
+  const valEl = $(`fval-${field}`);
+  if (valEl) valEl.textContent = val || '—';
+  renderAll();
+  toast(`✓ ${labels[field]||field} updated.`);
+}
+
+function addVisitNote() {
+  const text = $('newNoteText').value.trim();
+  if (!text) { toast('⚠️ Note is empty.', 'warn'); return; }
+  const h = households.find(x => x.id === profileHouseholdId);
+  if (!h) return;
+  if (!h.visitNotes) h.visitNotes = [];
+  const note = {id: Date.now(), text, author:'Admin (Sonicum)', date:'Jun 15, 2024'};
+  h.visitNotes.push(note);
+  h.lastUpdated = '2024-06-15';
+  auditLog.unshift({action:'Visit note added', detail:`${h.name}: note by Admin`, user:'Admin', ts:'Just now'});
+  $('newNoteText').value = '';
+  $('notesList').innerHTML = renderNotesList(h);
+  renderAll();
+  toast('✓ Note added.');
+}
+
+function deleteNote(noteId) {
+  const h = households.find(x => x.id === profileHouseholdId);
+  if (!h) return;
+  h.visitNotes = h.visitNotes.filter(n => n.id !== noteId);
+  $('notesList').innerHTML = renderNotesList(h);
+  toast('Note removed.', 'info');
+}
+
+function renderAll() {
+  renderTable();
+  renderStats();
+}
+
+// ── Boot ──
+// Volunteer magic link takes priority
+const _volParams = new URLSearchParams(window.location.search);
+if (_volParams.get('vol') && _volParams.get('stops')) {
+  $('loginScreen').style.display = 'none';
+  $('adminShell').style.display  = 'none';
+  parseURLOnLoad();
+} else {
+  // Check for existing session
+  $('adminShell').style.display = 'none';
+  const saved = sessionStorage.getItem('dfwros_user');
+  if (saved) {
+    try {
+      currentUser = JSON.parse(saved);
+      enterAdmin();
+    } catch(e) {
+      sessionStorage.removeItem('dfwros_user');
+    }
+  }
+  // Otherwise login screen stays visible (default)
+}
+</script>
+</body>
+</html>git add .
+git commit -m "Initial commit: DFW ROS demo app + Supabase schema"
+git branch -M main
+git push -u origin main
