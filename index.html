@@ -330,48 +330,6 @@ tr.row-archived td{opacity:.6}
 .packs-calc{display:inline-flex;align-items:center;gap:6px;background:var(--accent-light);color:var(--accent);padding:4px 10px;border-radius:99px;font-size:12px;font-weight:700}
 @media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
 
-/* ── Insights ── */
-.ins-section{margin-bottom:28px}
-.ins-section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.ins-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.ins-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;border-left:4px solid var(--border)}
-.ins-card.warn{border-left-color:var(--warn)}
-.ins-card.info{border-left-color:var(--st-graduated)}
-.ins-card.good{border-left-color:var(--st-active)}
-.ins-card.muted{border-left-color:var(--text-light)}
-.ins-count{font-size:32px;font-weight:800;line-height:1;margin-bottom:3px}
-.ins-label{font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:12px}
-.ins-list{border-top:1px solid var(--border);margin-top:10px;padding-top:10px}
-.ins-list-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
-.ins-list-item:last-child{border-bottom:none}
-.ins-list-name{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ins-list-detail{color:var(--text-muted);flex-shrink:0;font-size:11px}
-.ins-link{color:var(--accent);cursor:pointer;font-size:11px;font-weight:600;flex-shrink:0}
-.ins-link:hover{text-decoration:underline}
-/* Progress rows (approaching graduation) */
-.prog-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;margin-bottom:8px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px}
-.prog-info{}
-.prog-name{font-size:13px;font-weight:600;margin-bottom:2px}
-.prog-sub{font-size:11px;color:var(--text-muted)}
-.prog-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:120px}
-.prog-track{width:120px;height:7px;background:var(--border);border-radius:99px;overflow:hidden}
-.prog-fill{height:100%;border-radius:99px;background:var(--accent)}
-.prog-pct{font-size:11px;font-weight:700;color:var(--accent)}
-/* Zone breakdown */
-.zone-breakdown{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.zone-row{display:grid;grid-template-columns:140px 70px 70px 1fr;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--border);font-size:13px}
-.zone-row:last-child{border-bottom:none}
-.zone-hdr{background:var(--surface-2);font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
-.zone-bar-track{height:6px;background:var(--surface-2);border-radius:99px;overflow:hidden}
-.zone-bar-fill{height:100%;border-radius:99px;background:var(--accent);transition:width .4s}
-/* Health metrics */
-.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-.health-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px}
-.health-val{font-size:28px;font-weight:800;margin-bottom:3px}
-.health-lbl{font-size:12px;color:var(--text-muted)}
-.health-sub{font-size:11px;color:var(--text-light);margin-top:4px}
-/* Empty insight */
-.ins-empty{padding:20px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
 
 /* ── Login screen ── */
 .login-screen{position:fixed;inset:0;background:var(--sidebar);display:flex;align-items:center;justify-content:center;z-index:9000;padding:20px}
@@ -541,7 +499,6 @@ tr.row-archived td{opacity:.6}
         <span>📝</span> Pending Reviews
         <span class="nav-badge" id="pendingBadge">3</span>
       </button>
-      <button class="nav-item" onclick="showTab('insights')"><span>💡</span> Insights</button>
       <button class="nav-item" onclick="showTab('session')"><span>📦</span> Session Builder</button>
       <button class="nav-item" onclick="showTab('volunteers')"><span>👥</span> Volunteers</button>
       <button class="nav-item" onclick="showTab('audit')"><span>📋</span> Audit Log</button>
@@ -601,15 +558,6 @@ tr.row-archived td{opacity:.6}
         <div><div class="page-title">Pending Reviews</div><div class="page-sub">Volunteer-suggested corrections — approve to apply, reject to dismiss</div></div>
       </div>
       <div id="editCardContainer"></div>
-    </div>
-
-    <!-- ── INSIGHTS ── -->
-    <div class="tab-pane" id="tab-insights">
-      <div class="page-hd">
-        <div><div class="page-title">Insights</div><div class="page-sub">Program health, action items, and trends at a glance</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="renderInsights()">↻ Refresh</button>
-      </div>
-      <div id="insightsContent"></div>
     </div>
 
     <!-- ── SESSION BUILDER ── -->
@@ -1233,7 +1181,6 @@ function showTab(id) {
   if (id === 'applications') renderApplications();
   if (id === 'pending')  renderPending();
   if (id === 'audit')    renderAudit();
-  if (id === 'insights') renderInsights();
   if (id === 'volunteers') renderVolunteersTab();
 }
 
@@ -1341,206 +1288,6 @@ function renderStats() {
   badge.textContent = pending;
   badge.style.display = pending ? '' : 'none';
 }
-
-async function renderInsights() {
-  await loadSuggestedEdits();
-  const active    = households.filter(h => h.status === 'active');
-  const inactive  = households.filter(h => h.status === 'inactive');
-  const stale     = active.filter(h => isStale(h));
-  const pending   = suggestedEdits.filter(e => e.status === 'pending');
-  const graduated = inactive.filter(h => isPositiveReason(h.inactiveReason));
-
-  // Graduation candidates: active, 20+ deliveries
-  const gradCandidates = active.filter(h => h.timesServed >= 20)
-    .sort((a,b) => b.timesServed - a.timesServed);
-
-  // Approaching: active, 12–19 deliveries
-  const approaching = active.filter(h => h.timesServed >= 12 && h.timesServed < 20)
-    .sort((a,b) => b.timesServed - a.timesServed);
-
-  // Zone breakdown
-  const zones = [...new Set(active.map(h => h.zone))].sort();
-  const zoneData = zones.map(z => {
-    const zHouseholds = active.filter(h => h.zone === z);
-    return {zone:z, count:zHouseholds.length, packs:zHouseholds.reduce((s,h)=>s+packsFor(h.size),0)};
-  }).filter(z => z.count > 0);
-  const maxPacks = Math.max(...zoneData.map(z => z.packs), 1);
-
-  // Program health
-  const totalDeliveries  = households.reduce((s,h) => s+h.timesServed, 0);
-  const totalPacks       = active.reduce((s,h) => s+packsFor(h.size), 0);
-  const avgDeliveries    = active.length ? Math.round(active.reduce((s,h)=>s+h.timesServed,0)/active.length) : 0;
-  const dataQuality      = inactive.filter(h => h.inactiveReason==='wrong-address');
-
-  $('insightsContent').innerHTML = `
-
-    <!-- ── ACTION NEEDED ── -->
-    <div class="ins-section">
-      <div class="ins-section-title">⚡ Action Needed</div>
-      <div class="ins-action-grid">
-
-        <!-- Graduation candidates -->
-        <div class="ins-card ${gradCandidates.length>0?'warn':'good'}">
-          <div class="ins-count" style="color:${gradCandidates.length>0?'var(--warn)':'var(--st-active)'}">${gradCandidates.length}</div>
-          <div class="ins-label">Graduation Candidate${gradCandidates.length!==1?'s':''}</div>
-          ${gradCandidates.length > 0 ? `
-            <div class="ins-list">
-              ${gradCandidates.slice(0,4).map(h=>`
-                <div class="ins-list-item">
-                  <span class="ins-list-name">${h.name}</span>
-                  <span class="ins-list-detail">${h.timesServed} deliveries</span>
-                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
-                </div>
-              `).join('')}
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">These families may be ready to move on. Review their profiles and consider removing from routes.</div>
-          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No families overdue for review.</div>`}
-        </div>
-
-        <!-- Stale records -->
-        <div class="ins-card ${stale.length>0?'warn':'good'}">
-          <div class="ins-count" style="color:${stale.length>0?'var(--st-stale)':'var(--st-active)'}">${stale.length}</div>
-          <div class="ins-label">Stale Record${stale.length!==1?'s':''}</div>
-          ${stale.length > 0 ? `
-            <div class="ins-list">
-              ${stale.slice(0,4).map(h=>`
-                <div class="ins-list-item">
-                  <span class="ins-list-name">${h.name}</span>
-                  <span class="ins-list-detail">${daysSince(h.lastUpdated)}d ago</span>
-                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
-                </div>
-              `).join('')}
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">Records not updated in 25+ days. Verify these families are still at the same address.</div>
-          ` : `<div style="font-size:12px;color:var(--st-active)">✓ All records are current.</div>`}
-        </div>
-
-        <!-- Pending reviews -->
-        <div class="ins-card ${pending.length>0?'info':'good'}">
-          <div class="ins-count" style="color:${pending.length>0?'var(--st-graduated)':'var(--st-active)'}">${pending.length}</div>
-          <div class="ins-label">Pending Review${pending.length!==1?'s':''}</div>
-          ${pending.length > 0 ? `
-            <div class="ins-list">
-              ${pending.slice(0,4).map(e=>`
-                <div class="ins-list-item">
-                  <span class="ins-list-name">${e.householdName}</span>
-                  <span class="ins-list-detail">${e.fieldLabel}</span>
-                </div>
-              `).join('')}
-            </div>
-            <button class="btn btn-sm" style="margin-top:10px;background:var(--st-graduated-bg);color:var(--st-graduated);border:1px solid var(--st-graduated)" onclick="showTab('pending')">Review All →</button>
-          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No volunteer suggestions waiting.</div>`}
-        </div>
-
-        <!-- Data quality -->
-        <div class="ins-card ${dataQuality.length>0?'warn':'good'}">
-          <div class="ins-count" style="color:${dataQuality.length>0?'var(--danger)':'var(--st-active)'}">${dataQuality.length}</div>
-          <div class="ins-label">Address Problem${dataQuality.length!==1?'s':''}</div>
-          ${dataQuality.length > 0 ? `
-            <div class="ins-list">
-              ${dataQuality.slice(0,4).map(h=>`
-                <div class="ins-list-item">
-                  <span class="ins-list-name">${h.name}</span>
-                  <span class="ins-list-detail">${h.zone}</span>
-                  <span class="ins-link" onclick="showProfile(${h.id});showTab('households')">View →</span>
-                </div>
-              `).join('')}
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:10px">Inactive families flagged for wrong address. Reach out to verify before restoring.</div>
-          ` : `<div style="font-size:12px;color:var(--st-active)">✓ No address issues flagged.</div>`}
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ── ZONE BREAKDOWN ── -->
-    <div class="ins-section">
-      <div class="ins-section-title">📍 Zone Breakdown — This Week</div>
-      ${zoneData.length ? `
-        <div class="zone-breakdown">
-          <div class="zone-row zone-hdr">
-            <div>Zone</div><div>Families</div><div>Packs</div><div>Load</div>
-          </div>
-          ${zoneData.map(z=>`
-            <div class="zone-row">
-              <div style="font-weight:600">${z.zone}</div>
-              <div style="color:var(--text-muted)">${z.count}</div>
-              <div style="font-weight:700">${z.packs}</div>
-              <div class="zone-bar-track">
-                <div class="zone-bar-fill" style="width:${Math.round(z.packs/maxPacks*100)}%"></div>
-              </div>
-            </div>
-          `).join('')}
-          <div class="zone-row" style="background:var(--surface-2)">
-            <div style="font-weight:700;color:var(--text)">Total</div>
-            <div style="font-weight:700">${active.length}</div>
-            <div style="font-weight:800;color:var(--accent)">${totalPacks}</div>
-            <div></div>
-          </div>
-        </div>
-      ` : '<div class="ins-empty">No active households to display.</div>'}
-    </div>
-
-    <!-- ── APPROACHING GRADUATION ── -->
-    <div class="ins-section">
-      <div class="ins-section-title">🎯 Approaching Graduation <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">(12–19 deliveries)</span></div>
-      ${approaching.length ? approaching.map(h => {
-        const pct = Math.round(h.timesServed / 20 * 100);
-        return `
-          <div class="prog-card">
-            <div class="prog-info">
-              <div class="prog-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id});showTab('households')">${h.name}</div>
-              <div class="prog-sub">${h.zone} · ${h.size} people · ${h.timesServed} of 20 deliveries</div>
-            </div>
-            <div class="prog-right">
-              <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
-              <div class="prog-pct">${pct}%</div>
-            </div>
-          </div>
-        `;
-      }).join('') : '<div class="ins-empty">No families in the 12–19 delivery range right now.</div>'}
-    </div>
-
-    <!-- ── PROGRAM HEALTH ── -->
-    <div class="ins-section">
-      <div class="ins-section-title">📊 Program Health</div>
-      <div class="health-grid">
-        <div class="health-card">
-          <div class="health-val" style="color:var(--st-active)">${active.length}</div>
-          <div class="health-lbl">Active Families</div>
-          <div class="health-sub">${totalPacks} packs needed this week</div>
-        </div>
-        <div class="health-card">
-          <div class="health-val" style="color:var(--st-graduated)">${graduated.length}</div>
-          <div class="health-lbl">Families Graduated</div>
-          <div class="health-sub">Positive outcomes since start</div>
-        </div>
-        <div class="health-card">
-          <div class="health-val">${totalDeliveries.toLocaleString()}</div>
-          <div class="health-lbl">Total Deliveries</div>
-          <div class="health-sub">Across all families ever served</div>
-        </div>
-        <div class="health-card">
-          <div class="health-val">${avgDeliveries}</div>
-          <div class="health-lbl">Avg Deliveries / Family</div>
-          <div class="health-sub">Among currently active families</div>
-        </div>
-        <div class="health-card">
-          <div class="health-val">${households.length}</div>
-          <div class="health-lbl">Total Families on Record</div>
-          <div class="health-sub">Active, inactive, and graduated</div>
-        </div>
-        <div class="health-card">
-          <div class="health-val">${graduated.length && households.filter(h=>h.status==='inactive').length ? Math.round(graduated.length/households.filter(h=>h.status==='inactive').length*100) : 0}%</div>
-          <div class="health-lbl">Graduation Rate</div>
-          <div class="health-sub">Of all families who left the program</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderGradBanner() { /* Moved to Insights tab */ }
 
 // ── Graduate / Archive / Restore ──
 function openRemove(id) {
