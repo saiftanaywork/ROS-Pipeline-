@@ -473,6 +473,10 @@ tr.row-archived td{opacity:.6}
     <div class="sb-section">
       <div class="sb-label">Admin</div>
       <button class="nav-item active" onclick="showTab('households')"><span>🏠</span> Households</button>
+      <button class="nav-item" onclick="showTab('applications')" id="nav-applications">
+        <span>📥</span> Applications
+        <span class="nav-badge" id="applicationsBadge">0</span>
+      </button>
       <button class="nav-item" onclick="showTab('pending')" id="nav-pending">
         <span>📝</span> Pending Reviews
         <span class="nav-badge" id="pendingBadge">3</span>
@@ -516,6 +520,21 @@ tr.row-archived td{opacity:.6}
           <tbody id="householdTbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ── APPLICATIONS ── -->
+    <div class="tab-pane" id="tab-applications">
+      <div class="page-hd">
+        <div><div class="page-title">Applications</div><div class="page-sub">New household requests submitted through the public intake form</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="renderApplications()">↻ Refresh</button>
+      </div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-appfilter="pending" onclick="setAppFilter('pending',this)">Pending</button>
+        <button class="f-btn" data-appfilter="approved" onclick="setAppFilter('approved',this)">Approved</button>
+        <button class="f-btn" data-appfilter="rejected" onclick="setAppFilter('rejected',this)">Rejected</button>
+        <button class="f-btn" data-appfilter="all" onclick="setAppFilter('all',this)">All</button>
+      </div>
+      <div id="applicationsContainer"></div>
     </div>
 
     <!-- ── PENDING REVIEWS ── -->
@@ -1048,6 +1067,7 @@ function showTab(id) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') === `showTab('${id}')`) n.classList.add('active');
   });
+  if (id === 'applications') renderApplications();
   if (id === 'pending')  renderPending();
   if (id === 'audit')    renderAudit();
   if (id === 'insights') renderInsights();
@@ -1468,6 +1488,160 @@ function confirmReject() {
   e.status = 'rejected';
   auditLog.unshift({action:'Suggested edit rejected', detail:`${e.householdName}: ${e.fieldLabel} dismissed`, user:'Admin', ts:'Just now'});
   closeModal('reject'); renderAll(); renderPending(); toast(`Suggestion rejected.`,'info');
+}
+
+// ════════════════════════════════════════════
+//  APPLICATIONS (public intake form → admin review)
+// ════════════════════════════════════════════
+let zonesCache = [];
+let applicationsCache = [];
+let appFilter = 'pending';
+
+async function refreshApplicationsBadge() {
+  const { count, error } = await sb
+    .from('household_applications')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+  if (!error) {
+    const badge = $('applicationsBadge');
+    if (badge) badge.textContent = count || 0;
+  }
+}
+
+async function loadZonesCache() {
+  const { data, error } = await sb.from('zones').select('id, name').order('name');
+  if (!error) zonesCache = data || [];
+}
+
+async function renderApplications() {
+  if (!zonesCache.length) await loadZonesCache();
+
+  $('applicationsContainer').innerHTML = `<div class="empty-state"><div style="color:var(--text-muted);font-size:13px">Loading applications…</div></div>`;
+
+  const { data, error } = await sb
+    .from('household_applications')
+    .select('*')
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    console.error(error);
+    $('applicationsContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Couldn't load applications</div><div style="color:var(--text-muted);font-size:13px">${error.message}</div></div>`;
+    return;
+  }
+
+  applicationsCache = data || [];
+  updateApplicationsBadge();
+  renderApplicationsList();
+}
+
+function updateApplicationsBadge() {
+  const count = applicationsCache.filter(a => a.status === 'pending').length;
+  const badge = $('applicationsBadge');
+  if (badge) badge.textContent = count;
+}
+
+function setAppFilter(f, btn) {
+  appFilter = f;
+  document.querySelectorAll('[data-appfilter]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderApplicationsList();
+}
+
+function renderApplicationsList() {
+  const rows = appFilter === 'all' ? applicationsCache : applicationsCache.filter(a => a.status === appFilter);
+
+  if (!rows.length) {
+    $('applicationsContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-title">No ${appFilter === 'all' ? '' : appFilter + ' '}applications</div><div style="color:var(--text-muted);font-size:13px">New submissions from the intake form will show up here.</div></div>`;
+    return;
+  }
+
+  const zoneOptions = zonesCache.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+
+  $('applicationsContainer').innerHTML = rows.map(a => `
+    <div class="edit-card">
+      <div class="edit-card-hd">
+        <div>
+          <div class="edit-card-name">
+            ${a.full_name}
+            <span class="badge b-${a.status === 'pending' ? 'pending' : a.status === 'approved' ? 'active' : 'inactive'}" style="vertical-align:middle">${a.status}</span>
+            ${a.possible_duplicate_of ? `<span class="badge b-pending" style="vertical-align:middle" title="Phone matches an existing household on file">⚠ possible duplicate</span>` : ''}
+          </div>
+          <div class="edit-card-meta">${a.phone} · ${a.email || 'no email'} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="diff-box" style="grid-template-columns:1fr">
+        <div>
+          <div class="diff-col-lbl">Address</div>
+          <div class="diff-old" style="color:var(--text)">${a.address}${a.apartment ? ', ' + a.apartment : ''}, ${a.city || ''} ${a.zip_code || ''}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0;font-size:13px">
+        <div><div class="diff-col-lbl">Household size</div>${a.household_size}</div>
+        <div><div class="diff-col-lbl">Children / Seniors</div>${a.children} / ${a.seniors}</div>
+        <div><div class="diff-col-lbl">Language</div>${a.preferred_language || '—'}</div>
+      </div>
+      ${a.dietary_restrictions ? `<div class="edit-note">🍽️ Dietary: ${a.dietary_restrictions}</div>` : ''}
+      ${a.allergies ? `<div class="edit-note">⚠️ Allergies: ${a.allergies}</div>` : ''}
+      ${a.emergency_contact_name ? `<div class="edit-note">📞 Emergency contact: ${a.emergency_contact_name} (${a.emergency_contact_phone || 'no phone'})</div>` : ''}
+      ${a.status === 'rejected' && a.rejection_reason ? `<div class="edit-note">✕ Rejected: ${a.rejection_reason}</div>` : ''}
+
+      ${a.status === 'pending' ? `
+        <div class="edit-actions" style="align-items:center;flex-wrap:wrap;gap:10px">
+          <select class="search-box" id="zoneSelect-${a.id}" style="max-width:180px">
+            <option value="">Assign zone…</option>
+            ${zoneOptions}
+          </select>
+          <button class="btn btn-approve" onclick="approveApplication('${a.id}')">✓ Approve → Create Household</button>
+          <button class="btn btn-reject" onclick="rejectApplication('${a.id}')">✕ Reject</button>
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+async function approveApplication(appId) {
+  const select = $(`zoneSelect-${appId}`);
+  const zoneId = select ? select.value : '';
+  if (!zoneId) { toast('Please select a zone before approving.', 'info'); return; }
+
+  const { data, error } = await sb.rpc('approve_application', {
+    p_application_id: appId,
+    p_admin_name: currentUser.name,
+    p_zone_id: zoneId,
+  });
+
+  if (error) {
+    console.error(error);
+    toast(`⚠️ Couldn't approve: ${error.message}`);
+    return;
+  }
+
+  toast('✓ Household created from application.');
+  await loadHouseholdsFromSupabase();
+  renderAll();
+  renderApplications();
+}
+
+async function rejectApplication(appId) {
+  const reason = prompt('Reason for rejecting this application (shown in the audit log):');
+  if (reason === null) return; // cancelled
+
+  const { error } = await sb.rpc('reject_application', {
+    p_application_id: appId,
+    p_admin_name: currentUser.name,
+    p_reason: reason || 'No reason given',
+  });
+
+  if (error) {
+    console.error(error);
+    toast(`⚠️ Couldn't reject: ${error.message}`);
+    return;
+  }
+
+  toast('Application rejected.', 'info');
+  renderApplications();
 }
 
 // ════════════════════════════════════════════
@@ -1963,14 +2137,8 @@ function previewVolLink(linkIdx) {
 }
 
 // ════════════════════════════════════════════
-//  AUTH
+//  AUTH — real Supabase Auth
 // ════════════════════════════════════════════
-
-// Demo credentials — replace with Supabase Auth in production
-const ADMIN_ACCOUNTS = [
-  { email: 'admin@dfwros.org', password: 'dfwros2024', name: 'Sonicum', initials: 'S' },
-];
-
 let currentUser = null;
 
 function handleLogin() {
@@ -1992,22 +2160,36 @@ function handleLogin() {
   btn.disabled = true;
   btn.textContent = 'Signing in…';
 
-  // Simulate async auth (swap for supabase.auth.signInWithPassword in prod)
-  setTimeout(() => {
-    const match = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
-    if (match) {
-      currentUser = match;
-      sessionStorage.setItem('dfwros_user', JSON.stringify(match));
-      enterAdmin();
-    } else {
+  sb.auth.signInWithPassword({ email, password }).then(async ({ data, error }) => {
+    if (error || !data.session) {
       errEl.textContent = 'Incorrect email or password.';
       errEl.classList.add('show');
       $('loginEmail').classList.add('error');
       $('loginPassword').classList.add('error');
       btn.disabled = false;
       btn.textContent = 'Sign In →';
+      return;
     }
-  }, 600);
+
+    // Confirm this user actually has an admins row — not just any Supabase login
+    const { data: adminRow, error: adminErr } = await sb
+      .from('admins')
+      .select('name, initials')
+      .eq('user_id', data.session.user.id)
+      .maybeSingle();
+
+    if (adminErr || !adminRow) {
+      await sb.auth.signOut();
+      errEl.textContent = "This account isn't set up as an admin. Contact whoever manages the database.";
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Sign In →';
+      return;
+    }
+
+    currentUser = { name: adminRow.name, initials: adminRow.initials || adminRow.name[0] };
+    enterAdmin();
+  });
 }
 
 async function enterAdmin() {
@@ -2021,14 +2203,15 @@ async function enterAdmin() {
 
   $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
   await loadHouseholdsFromSupabase();
+  refreshApplicationsBadge();
 
   renderAll();
   toast(`Welcome back, ${currentUser.name}! 👋`);
 }
 
 function handleLogout() {
+  sb.auth.signOut();
   currentUser = null;
-  sessionStorage.removeItem('dfwros_user');
   $('adminShell').style.display  = 'none';
   $('volShell').classList.remove('show');
   $('loginScreen').style.display = 'flex';
@@ -2526,19 +2709,26 @@ if (_volParams.get('vol') && _volParams.get('stops')) {
   $('adminShell').style.display  = 'none';
   parseURLOnLoad();
 } else {
-  // Check for existing session
+  // Check for an existing Supabase session (survives refresh, not just this tab)
   $('adminShell').style.display = 'none';
-  const saved = sessionStorage.getItem('dfwros_user');
-  if (saved) {
-    try {
-      currentUser = JSON.parse(saved);
+  sb.auth.getSession().then(async ({ data }) => {
+    if (!data.session) return; // login screen stays visible (default)
+
+    const { data: adminRow } = await sb
+      .from('admins')
+      .select('name, initials')
+      .eq('user_id', data.session.user.id)
+      .maybeSingle();
+
+    if (adminRow) {
+      currentUser = { name: adminRow.name, initials: adminRow.initials || adminRow.name[0] };
       enterAdmin();
-    } catch(e) {
-      sessionStorage.removeItem('dfwros_user');
+    } else {
+      sb.auth.signOut(); // signed into Supabase but not an admin — don't let them in
     }
-  }
-  // Otherwise login screen stays visible (default)
+  });
 }
+
 </script>
 </body>
 </html>
