@@ -444,12 +444,6 @@ tr.row-archived td{opacity:.6}
 
     <button class="login-btn" id="loginBtn" onclick="handleLogin()">Sign In →</button>
 
-    <div class="login-hint">
-      <strong>Demo credentials</strong><br>
-      Email: <strong>admin@dfwros.org</strong><br>
-      Password: <strong>dfwros2024</strong>
-    </div>
-
     <div class="login-footer">
       Volunteer? Your coordinator will send you a link — no login needed.
     </div>
@@ -487,7 +481,7 @@ tr.row-archived td{opacity:.6}
       <button class="nav-item" onclick="showTab('audit')"><span>📋</span> Audit Log</button>
     </div>
     <div class="sb-footer">
-      <button class="view-switch-btn to-vol" onclick="switchView('volunteer')">📦 Switch to Volunteer View</button>
+      <button class="view-switch-btn to-vol" onclick="startVolunteerDemo()">📦 Switch to Volunteer View</button>
       <button class="theme-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
       <button class="logout-btn" onclick="handleLogout()">⬡ Sign Out</button>
     </div>
@@ -603,18 +597,12 @@ tr.row-archived td{opacity:.6}
     <div class="tab-pane" id="tab-volunteers">
       <div class="page-hd">
         <div><div class="page-title">Volunteers</div><div class="page-sub">Zone assignments and delivery history</div></div>
-        <button class="btn btn-primary">+ Add Volunteer</button>
+        <button class="btn btn-primary" onclick="openModal('addVolunteer')">+ Add Volunteer</button>
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Zones</th><th>Deliveries</th><th>Last Active</th></tr></thead>
-          <tbody>
-            <tr><td class="td-name">Fatima Al-Sayed</td><td>214-555-1001</td><td><span class="chip">North Dallas</span></td><td>42</td><td>Jun 15, 2024</td></tr>
-            <tr><td class="td-name">Ahmed Khan</td><td>214-555-1002</td><td><span class="chip">North Dallas</span> <span class="chip">Plano/Allen</span></td><td>38</td><td>Jun 15, 2024</td></tr>
-            <tr><td class="td-name">Yusuf Osman</td><td>972-555-1003</td><td><span class="chip">South Dallas</span></td><td>31</td><td>Jun 14, 2024</td></tr>
-            <tr><td class="td-name">Maryam Hassan</td><td>817-555-1004</td><td><span class="chip">Fort Worth</span></td><td>19</td><td>Jun 15, 2024</td></tr>
-            <tr><td class="td-name">Ibrahim Diallo</td><td>214-555-1005</td><td><span class="chip">South Dallas</span></td><td>11</td><td>Jun 8, 2024</td></tr>
-          </tbody>
+          <thead><tr><th>Name</th><th>Phone</th><th>Zone</th><th>Deliveries</th><th>Last Active</th></tr></thead>
+          <tbody id="volunteersTbody"></tbody>
         </table>
       </div>
     </div>
@@ -809,6 +797,22 @@ tr.row-archived td{opacity:.6}
   </div>
 </div>
 
+<!-- Add Volunteer -->
+<div class="modal-backdrop" id="modal-addVolunteer">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Add New Volunteer</div><button class="modal-close" onclick="closeModal('addVolunteer')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="newVolName" placeholder="e.g. Fatima Al-Sayed"></div>
+      <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="newVolPhone" placeholder="214-555-0000"></div>
+      <div class="form-group"><label class="form-label">Zone</label><select class="form-select" id="newVolZone"><option value="">Unassigned</option><option>North Dallas</option><option>South Dallas</option><option>Plano/Allen</option><option>Fort Worth</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addVolunteer')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddVolunteer()">Add Volunteer</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -834,21 +838,23 @@ const TODAY = new Date();
 // Supabase read/write calls.
 let households = [];
 
-let suggestedEdits = [
-  {id:1, householdId:3, householdName:'Karimi Family',    field:'address', fieldLabel:'Address',        currentValue:'2301 Skillman St #44, Dallas TX 75206', suggestedValue:'2301 Skillman St #48, Dallas TX 75206', note:"They've moved to unit 48, same floor.", submittedBy:'Ahmed (Volunteer)',  submittedAt:'Jun 15 · 10:23 AM', status:'pending'},
-  {id:2, householdId:1, householdName:'Al-Hassan Family', field:'notes',   fieldLabel:'Delivery Notes', currentValue:'Gate code #2847. Ring bell twice.',      suggestedValue:'Gate code changed to #3901. Ring bell twice. New dog in unit — friendly.', note:'', submittedBy:'Fatima (Volunteer)', submittedAt:'Jun 15 · 9:47 AM',  status:'pending'},
-  {id:3, householdId:6, householdName:'Rahman Family',    field:'size',    fieldLabel:'Household Size', currentValue:'6',                                       suggestedValue:'8', note:'Two relatives moved in. Please confirm.',  submittedBy:'Yusuf (Volunteer)',  submittedAt:'Jun 14 · 11:02 AM', status:'pending'},
-];
+// Suggested edits and the audit log now live in Supabase (suggested_edits /
+// audit_log tables) — these arrays are populated at runtime by
+// loadSuggestedEdits() and renderAudit() respectively.
+let suggestedEdits = [];
+let auditLog = [];
 
-let auditLog = [
-  {action:'Household graduated',       detail:'Nguyen Family — Found employment',                        user:'Admin (Sonicum)', ts:'Jun 1 · 2:34 PM'},
-  {action:'Suggested edit approved',   detail:'Al-Hassan Family: Address corrected via volunteer',       user:'Admin (Sonicum)', ts:'May 28 · 10:15 AM'},
-  {action:'New household added',       detail:'Diallo Family — Fort Worth zone',                         user:'Admin (Sonicum)', ts:'May 20 · 9:03 AM'},
-  {action:'Household archived',        detail:'Morales Family — wrong address on file',                  user:'Admin (Sonicum)', ts:'Apr 15 · 3:22 PM'},
-  {action:'Record flagged as stale',   detail:'Karimi Family — not updated in 26+ days',                 user:'System',          ts:'Jun 15 · 12:00 AM'},
-];
+// Volunteer roster now lives in Supabase (volunteers table) — populated by
+// loadVolunteers(). VOLUNTEER_NAMES feeds the Session Builder autocomplete.
+let volunteersCache = [];
+let VOLUNTEER_NAMES = [];
 
-const VOLUNTEERS = ['Fatima Al-Sayed','Ahmed Khan','Yusuf Osman','Maryam Hassan','Ibrahim Diallo'];
+const ZONE_CENTROIDS = {
+  'North Dallas': {lat:32.90, lng:-96.80},
+  'South Dallas': {lat:32.70, lng:-96.78},
+  'Plano/Allen':  {lat:33.02, lng:-96.70},
+  'Fort Worth':   {lat:32.75, lng:-97.33},
+};
 
 // Cluster colors: [header bg, border, text, dot bg]
 const CLUSTER_PALETTE = [
@@ -871,6 +877,7 @@ let pendingHouseholdId = null;
 let volStopsData   = [];           // households shown in volunteer view
 let volName        = '';
 let volDelivered   = new Set();
+let currentSessionToken = null;    // delivery_sessions.token for the active volunteer link (null in local preview)
 
 // ════════════════════════════════════════════
 //  UTILS
@@ -938,7 +945,7 @@ async function loadHouseholdsFromSupabase() {
     visitNotes: (row.visit_notes || [])
       .slice()
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .map((n, i) => ({ id: i + 1, text: n.text, author: n.author, date: (n.created_at || '').slice(0, 10) })),
+      .map(n => ({ id: n.id, text: n.text, author: n.author, date: (n.created_at || '').slice(0, 10) })),
   }));
 }
 
@@ -968,12 +975,95 @@ function fmt(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
+function fmtDateTime(ts) {
+  return new Date(ts).toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+
 function toast(msg, type = 'success') {
   const t = document.createElement('div');
   t.className = `toast t-${type}`;
   t.innerHTML = msg;
   $('toastWrap').appendChild(t);
   setTimeout(() => t.remove(), 3500);
+}
+
+async function logAudit(action, detail) {
+  const user_name = currentUser ? currentUser.name : 'System';
+  const { error } = await sb.from('audit_log').insert({ action, detail, user_name });
+  if (error) console.error('Failed to log audit entry:', error);
+}
+
+async function loadVolunteers() {
+  const { data, error } = await sb.from('volunteers').select('id, name, phone, active, zones ( name )').order('name');
+  if (error) { console.error('Failed to load volunteers:', error); return; }
+  volunteersCache = data || [];
+  VOLUNTEER_NAMES = volunteersCache.filter(v => v.active).map(v => v.name);
+}
+
+async function loadSuggestedEdits() {
+  const { data, error } = await sb.from('suggested_edits').select('*').order('created_at', {ascending:false});
+  if (error) { console.error('Failed to load suggested edits:', error); return; }
+  suggestedEdits = (data || []).map(e => ({
+    id: e.id,
+    householdDbId: e.household_id,
+    householdName: households.find(h => h.dbId === e.household_id)?.name || '(household removed)',
+    field: e.field, fieldLabel: e.field_label,
+    currentValue: e.current_value, suggestedValue: e.suggested_value, note: e.note,
+    submittedBy: e.submitted_by, submittedAt: fmtDateTime(e.created_at), status: e.status,
+  }));
+}
+
+async function renderVolunteersTab() {
+  $('volunteersTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>`;
+  await loadVolunteers();
+
+  const { data: sessions, error } = await sb.from('delivery_sessions').select('volunteer_name, delivered_ids, created_at');
+  if (error) console.error('Failed to load delivery sessions:', error);
+
+  const statsByName = {};
+  (sessions || []).forEach(s => {
+    const st = statsByName[s.volunteer_name] || { deliveries: 0, lastActive: null };
+    st.deliveries += (s.delivered_ids || []).length;
+    if (!st.lastActive || new Date(s.created_at) > new Date(st.lastActive)) st.lastActive = s.created_at;
+    statsByName[s.volunteer_name] = st;
+  });
+
+  if (!volunteersCache.length) {
+    $('volunteersTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">No volunteers yet — add one, or they'll appear here automatically after their first delivery session.</td></tr>`;
+    return;
+  }
+
+  $('volunteersTbody').innerHTML = volunteersCache.map(v => {
+    const st = statsByName[v.name] || { deliveries: 0, lastActive: null };
+    return `
+      <tr>
+        <td class="td-name">${v.name}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
+        <td>${v.phone || '—'}</td>
+        <td>${v.zones ? `<span class="chip">${v.zones.name}</span>` : '—'}</td>
+        <td>${st.deliveries}</td>
+        <td>${st.lastActive ? fmt(st.lastActive.slice(0,10)) : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function submitAddVolunteer() {
+  const name = $('newVolName').value.trim();
+  if (!name) { toast('⚠️ Name is required.','warn'); return; }
+  const phone = $('newVolPhone').value.trim();
+  const zoneName = $('newVolZone').value;
+
+  if (!zonesCache.length) await loadZonesCache();
+  const zone = zonesCache.find(z => z.name === zoneName);
+
+  const { error } = await sb.from('volunteers').insert({ name, phone: phone || null, zone_id: zone ? zone.id : null });
+  if (error) { console.error(error); toast(`⚠️ Couldn't add volunteer: ${error.message}`); return; }
+
+  await logAudit('Volunteer added', name);
+  closeModal('addVolunteer');
+  $('newVolName').value = ''; $('newVolPhone').value = ''; $('newVolZone').value = '';
+  await renderVolunteersTab();
+  toast(`👥 ${name} added to roster.`);
 }
 
 // ════════════════════════════════════════════
@@ -1071,11 +1161,20 @@ function showTab(id) {
   if (id === 'pending')  renderPending();
   if (id === 'audit')    renderAudit();
   if (id === 'insights') renderInsights();
+  if (id === 'volunteers') renderVolunteersTab();
 }
 
 // ════════════════════════════════════════════
 //  VIEW SWITCH
 // ════════════════════════════════════════════
+function startVolunteerDemo() {
+  currentSessionToken = null;
+  volStopsData = [];
+  volDelivered = new Set();
+  $('volBanner').style.display = 'none';
+  switchView('volunteer');
+}
+
 function switchView(v) {
   if (v === 'volunteer') {
     $('adminShell').style.display = 'none';
@@ -1170,7 +1269,8 @@ function renderStats() {
   badge.style.display = pending ? '' : 'none';
 }
 
-function renderInsights() {
+async function renderInsights() {
+  await loadSuggestedEdits();
   const active    = households.filter(h => h.status === 'active');
   const inactive  = households.filter(h => h.status === 'inactive');
   const stale     = active.filter(h => isStale(h));
@@ -1377,16 +1477,22 @@ function openRemove(id) {
   $('removeNotes').value = '';
   openModal('remove');
 }
-function confirmRemove() {
+async function confirmRemove() {
   if (!$('removeReason').value) { toast('⚠️ Please select a reason.','warn'); return; }
   const h = households.find(x => x.id===pendingHouseholdId);
-  h.status = 'inactive';
-  h.inactiveReason = $('removeReason').value;
+  const inactiveReason = $('removeReason').value;
   const note = $('removeNotes').value;
-  if (note) h.notes = note;
-  const positive = isPositiveReason(h.inactiveReason);
+  const positive = isPositiveReason(inactiveReason);
   const reasonText = $('removeReason').options[$('removeReason').selectedIndex].text;
-  auditLog.unshift({action: positive ? 'Family graduated' : 'Family archived', detail:`${h.name} — ${reasonText}`, user:'Admin', ts:'Just now'});
+
+  const update = { status: 'inactive', inactive_reason: inactiveReason };
+  if (note) update.notes = note;
+  const { error } = await sb.from('households').update(update).eq('id', h.dbId);
+  if (error) { console.error(error); toast(`⚠️ Couldn't update: ${error.message}`); return; }
+
+  h.status = 'inactive'; h.inactiveReason = inactiveReason;
+  if (note) h.notes = note;
+  await logAudit(positive ? 'Family graduated' : 'Family archived', `${h.name} — ${reasonText}`);
   closeModal('remove');
   if (profileHouseholdId === h.id) renderProfile();
   renderAll();
@@ -1398,37 +1504,58 @@ function openRestore(id) {
   $('restoreHouseholdName').textContent = households.find(h => h.id===id).name;
   openModal('restore');
 }
-function confirmRestore() {
+async function confirmRestore() {
   const h = households.find(x => x.id===pendingHouseholdId);
+  const { error } = await sb.from('households').update({ status: 'active', inactive_reason: null }).eq('id', h.dbId);
+  if (error) { console.error(error); toast(`⚠️ Couldn't restore: ${error.message}`); return; }
+
   h.status = 'active'; h.inactiveReason = null;
-  auditLog.unshift({action:'Household restored', detail:`${h.name} returned to active`, user:'Admin', ts:'Just now'});
+  await logAudit('Household restored', `${h.name} returned to active`);
   closeModal('restore');
   if (profileHouseholdId === h.id) renderProfile();
   renderAll();
   toast(`↩ ${h.name} restored to active.`,'info');
 }
 
-function addHousehold() {
+async function addHousehold() {
   const name = $('newName').value.trim();
   const addr = $('newAddress').value.trim();
   if (!name || !addr) { toast('⚠️ Name and address are required.','warn'); return; }
-  const h = {
-    id: Date.now(), name, address: addr,
-    zone: $('newZone').value, size: parseInt($('newSize').value)||4,
-    adolescents:0, health:$('newHealth').value, dietary:$('newDietary').value,
-    phone:$('newPhone').value, packs:2, status:'active', inactiveReason:null,
-    timesServed:0, lastUpdated:'2024-06-15', notes:$('newNotes').value,
-    lat:32.78, lng:-96.80
-  };
-  households.push(h);
-  auditLog.unshift({action:'New household added', detail:`${h.name} — ${h.zone}`, user:'Admin', ts:'Just now'});
-  closeModal('addHousehold'); renderAll(); toast(`🏠 ${h.name} added.`);
+
+  if (!zonesCache.length) await loadZonesCache();
+  const zoneName = $('newZone').value;
+  const zone = zonesCache.find(z => z.name === zoneName);
+  if (!zone) { toast('⚠️ Unknown zone.','warn'); return; }
+
+  const size = parseInt($('newSize').value) || 4;
+  const c = ZONE_CENTROIDS[zoneName] || {lat:32.78, lng:-96.80};
+
+  const { error } = await sb.from('households').insert({
+    name, address: addr, zone_id: zone.id,
+    size, adolescents: 0,
+    health: $('newHealth').value || null,
+    dietary: $('newDietary').value || null,
+    phone: $('newPhone').value || null,
+    packs: packsFor(size),
+    notes: $('newNotes').value || null,
+    lat: c.lat + (Math.random()-0.5)*0.02,
+    lng: c.lng + (Math.random()-0.5)*0.02,
+  });
+  if (error) { console.error(error); toast(`⚠️ Couldn't add household: ${error.message}`); return; }
+
+  await logAudit('New household added', `${name} — ${zoneName}`);
+  closeModal('addHousehold');
+  await loadHouseholdsFromSupabase();
+  renderAll();
+  toast(`🏠 ${name} added.`);
 }
 
 // ════════════════════════════════════════════
 //  PENDING REVIEWS
 // ════════════════════════════════════════════
-function renderPending() {
+async function renderPending() {
+  $('editCardContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
+  await loadSuggestedEdits();
   const pending = suggestedEdits.filter(e => e.status==='pending');
   if (!pending.length) {
     $('editCardContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div style="color:var(--text-muted);font-size:13px">No pending suggestions right now.</div></div>`;
@@ -1449,8 +1576,8 @@ function renderPending() {
       </div>
       ${e.note ? `<div class="edit-note">💬 "${e.note}"</div>` : ''}
       <div class="edit-actions">
-        <button class="btn btn-approve" onclick="openApprove(${e.id})">✓ Approve & Apply</button>
-        <button class="btn btn-reject"  onclick="openReject(${e.id})">✕ Reject</button>
+        <button class="btn btn-approve" onclick="openApprove('${e.id}')">✓ Approve & Apply</button>
+        <button class="btn btn-reject"  onclick="openReject('${e.id}')">✕ Reject</button>
       </div>
     </div>
   `).join('');
@@ -1465,16 +1592,25 @@ function openApprove(editId) {
   $('approveNew').textContent            = e.suggestedValue;
   openModal('approve');
 }
-function confirmApprove() {
+async function confirmApprove() {
   const e = suggestedEdits.find(x => x.id===pendingEditId);
-  const h = households.find(x => x.id===e.householdId);
+  if (!e) return;
+  const h = households.find(x => x.dbId===e.householdDbId);
+
   if (h) {
-    const map = {address:'address',size:'size',phone:'phone',notes:'notes',health:'health',other:'notes'};
-    h[map[e.field]||'notes'] = e.field==='size' ? parseInt(e.suggestedValue) : e.suggestedValue;
-    h.lastUpdated = '2024-06-15';
+    const columns = {address:'address', size:'size', phone:'phone', notes:'notes', health:'health', other:'notes'};
+    const column = columns[e.field] || 'notes';
+    const value = e.field==='size' ? parseInt(e.suggestedValue) : e.suggestedValue;
+    const { error } = await sb.from('households').update({ [column]: value }).eq('id', h.dbId);
+    if (error) { console.error(error); toast(`⚠️ Couldn't apply change: ${error.message}`); return; }
+    h[column] = value;
+    h.lastUpdated = new Date().toISOString().slice(0,10);
   }
-  e.status = 'approved';
-  auditLog.unshift({action:'Suggested edit approved', detail:`${e.householdName}: ${e.fieldLabel} updated`, user:'Admin', ts:'Just now'});
+
+  const { error: statusErr } = await sb.from('suggested_edits').update({ status: 'approved' }).eq('id', e.id);
+  if (statusErr) { console.error(statusErr); toast(`⚠️ Couldn't update suggestion: ${statusErr.message}`); return; }
+
+  await logAudit('Suggested edit approved', `${e.householdName}: ${e.fieldLabel} updated`);
   closeModal('approve'); renderAll(); renderPending(); toast(`✓ Applied to ${e.householdName}.`);
 }
 
@@ -1483,10 +1619,15 @@ function openReject(editId) {
   $('rejectReason').value = '';
   openModal('reject');
 }
-function confirmReject() {
+async function confirmReject() {
   const e = suggestedEdits.find(x => x.id===pendingEditId);
-  e.status = 'rejected';
-  auditLog.unshift({action:'Suggested edit rejected', detail:`${e.householdName}: ${e.fieldLabel} dismissed`, user:'Admin', ts:'Just now'});
+  if (!e) return;
+  const reason = $('rejectReason').value.trim();
+
+  const { error } = await sb.from('suggested_edits').update({ status: 'rejected' }).eq('id', e.id);
+  if (error) { console.error(error); toast(`⚠️ Couldn't reject: ${error.message}`); return; }
+
+  await logAudit('Suggested edit rejected', `${e.householdName}: ${e.fieldLabel} dismissed${reason ? ' — ' + reason : ''}`);
   closeModal('reject'); renderAll(); renderPending(); toast(`Suggestion rejected.`,'info');
 }
 
@@ -1647,14 +1788,26 @@ async function rejectApplication(appId) {
 // ════════════════════════════════════════════
 //  AUDIT LOG
 // ════════════════════════════════════════════
-function renderAudit() {
+async function renderAudit() {
+  $('auditContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
+  const { data, error } = await sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(100);
+  if (error) {
+    console.error(error);
+    $('auditContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Couldn't load audit log</div><div style="color:var(--text-muted);font-size:13px">${error.message}</div></div>`;
+    return;
+  }
+  auditLog = data || [];
+  if (!auditLog.length) {
+    $('auditContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No activity yet</div></div>`;
+    return;
+  }
   $('auditContainer').innerHTML = auditLog.map(a => `
     <div class="audit-item">
       <div class="audit-dot"></div>
       <div>
         <div class="audit-action">${a.action}</div>
-        <div class="audit-detail">${a.detail}</div>
-        <div class="audit-meta">${a.user} · ${a.ts}</div>
+        <div class="audit-detail">${a.detail||''}</div>
+        <div class="audit-meta">${a.user_name} · ${fmtDateTime(a.created_at)}</div>
       </div>
     </div>
   `).join('');
@@ -1988,10 +2141,10 @@ function renderClusterCards() {
             <input type="text" class="vol-input${assigned?' has-val':''}" id="assign-${idx}" list="roster-${idx}"
               placeholder="Type any name, or pick from roster…" value="${assigned}"
               oninput="onAssignInput(${idx},this)">
-            <datalist id="roster-${idx}">${VOLUNTEERS.map(v=>`<option value="${v}">`).join('')}</datalist>
+            <datalist id="roster-${idx}">${VOLUNTEER_NAMES.map(v=>`<option value="${v}">`).join('')}</datalist>
             ${assigned?`<span class="assigned-tag">✓ ${assigned.split(' ')[0]}</span>`:''}
           </div>
-          ${assigned && !VOLUNTEERS.includes(assigned)?`<div style="font-size:11px;color:var(--st-stale)">⚠ Not in roster — link still works.</div>`:''}
+          ${assigned && !VOLUNTEER_NAMES.includes(assigned)?`<div style="font-size:11px;color:var(--st-stale)">⚠ Not in roster — link still works.</div>`:''}
         </div>
       </div>
     `;
@@ -2008,7 +2161,7 @@ function onAssignInput(idx, el) {
   el.className = 'vol-input' + (el.value.trim() ? ' has-val' : '');
 }
 
-function generateLinks() {
+async function generateLinks() {
   // Sync any assignments not yet captured by oninput
   sessionClusters.forEach((_, idx) => {
     const el = $(`assign-${idx}`);
@@ -2030,18 +2183,33 @@ function generateLinks() {
   });
 
   const base = window.location.href.split('?')[0];
-  generatedLinks = Object.entries(byVol).map(([vol, stops]) => {
-    const ids  = stops.map(h => h.id).join(',');
-    const url  = `${base}?vol=${encodeURIComponent(vol)}&stops=${ids}&date=20240615`;
-    const isNew = !VOLUNTEERS.includes(vol);
-    return {vol, stops, ids, url, isNew};
-  });
+  const expiresAt = new Date(Date.now() + 7*86400000).toISOString();
 
-  auditLog.unshift({
-    action: 'Delivery session created',
-    detail: `${sessionClusters.flat().length} stops across ${generatedLinks.length} volunteer${generatedLinks.length>1?'s':''}`,
-    user: 'Admin', ts: 'Just now'
-  });
+  const results = await Promise.all(Object.entries(byVol).map(async ([vol, stops]) => {
+    const token = crypto.randomUUID().replace(/-/g, '');
+    const matchedVol = volunteersCache.find(v => v.name === vol);
+
+    const { error } = await sb.from('delivery_sessions').insert({
+      volunteer_id: matchedVol ? matchedVol.id : null,
+      volunteer_name: vol,
+      token,
+      stop_household_ids: stops.map(h => h.dbId),
+      expires_at: expiresAt,
+    });
+    if (error) { console.error('Failed to create delivery session:', error); return null; }
+
+    const url = `${base}?session=${token}&vol=${encodeURIComponent(vol)}`;
+    const isNew = !VOLUNTEER_NAMES.includes(vol);
+    return {vol, stops, token, url, isNew};
+  }));
+
+  generatedLinks = results.filter(Boolean);
+  if (generatedLinks.length < Object.keys(byVol).length) {
+    toast(`⚠️ Some links couldn't be created — check the console.`, 'warn');
+  }
+  if (!generatedLinks.length) return;
+
+  await logAudit('Delivery session created', `${sessionClusters.flat().length} stops across ${generatedLinks.length} volunteer${generatedLinks.length>1?'s':''}`);
 
   $('linksSection').style.display = '';
   renderLinks();
@@ -2092,11 +2260,12 @@ function renderLinks() {
   }
 }
 
-function addVolToRoster(name) {
-  if (!VOLUNTEERS.includes(name)) {
-    VOLUNTEERS.push(name);
-    auditLog.unshift({action:'Volunteer added to roster', detail:name, user:'Admin', ts:'Just now'});
-    renderStats();
+async function addVolToRoster(name) {
+  if (!VOLUNTEER_NAMES.includes(name)) {
+    const { error } = await sb.from('volunteers').insert({ name });
+    if (error) { console.error(error); toast(`⚠️ Couldn't add to roster: ${error.message}`); return; }
+    await logAudit('Volunteer added to roster', name);
+    await loadVolunteers();
   }
   // Remove from banner
   const row = document.getElementById(`newvolrow-${CSS.escape(name)}`);
@@ -2127,11 +2296,29 @@ function sendWhatsApp(vol, url) {
   window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
-function previewVolLink(linkIdx) {
+async function loadVolunteerSession(token, displayName) {
+  currentSessionToken = token;
+  const { data, error } = await sb.rpc('get_volunteer_stops', { p_token: token });
+  if (error || !data || !data.length) {
+    console.error(error);
+    volStopsData = [];
+    volDelivered = new Set();
+    volName = displayName || 'Volunteer';
+    toast(`⚠️ Couldn't load this delivery link — it may have expired.`, 'warn');
+    return;
+  }
+  volStopsData = data.map(r => ({
+    id: r.household_id, dbId: r.household_id, name: r.name, address: r.address,
+    lat: r.lat, lng: r.lng, size: r.size, adolescents: r.adolescents, packs: r.packs,
+    health: r.health, dietary: r.dietary, notes: r.notes, deliveryWindow: r.delivery_window,
+  }));
+  volDelivered = new Set(data.filter(r => r.delivered).map(r => r.household_id));
+  volName = displayName || 'Volunteer';
+}
+
+async function previewVolLink(linkIdx) {
   const lnk = generatedLinks[linkIdx];
-  volStopsData = lnk.stops;
-  volName = lnk.vol;
-  volDelivered = new Set();
+  await loadVolunteerSession(lnk.token, lnk.vol);
   $('volBanner').style.display = '';
   switchView('volunteer');
 }
@@ -2203,6 +2390,7 @@ async function enterAdmin() {
 
   $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
   await loadHouseholdsFromSupabase();
+  await Promise.all([loadSuggestedEdits(), loadVolunteers(), loadZonesCache()]);
   refreshApplicationsBadge();
 
   renderAll();
@@ -2228,37 +2416,31 @@ document.addEventListener('keydown', e => {
 });
 
 
-function parseURLOnLoad() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const vol   = params.get('vol');
-    const stops = params.get('stops');
-    if (!vol || !stops) return;
+async function parseURLOnLoad() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('session');
+  if (!token) return;
 
-    const ids = stops.split(',').map(Number);
-    const matched = households.filter(h => ids.includes(h.id));
-    // Preserve order from URL
-    volStopsData = ids.map(id => matched.find(h => h.id===id)).filter(Boolean);
-    volName = decodeURIComponent(vol);
-    volDelivered = new Set();
-    $('volBanner').style.display = '';
-    $('adminShell').style.display = 'none';
-    $('volShell').classList.add('show');
-    renderVolunteer();
-  } catch(e) { /* no params — normal admin load */ }
+  const vol = params.get('vol');
+  await loadVolunteerSession(token, vol ? decodeURIComponent(vol) : null);
+  $('volBanner').style.display = '';
+  $('adminShell').style.display = 'none';
+  $('volShell').classList.add('show');
+  renderVolunteer();
 }
 
 // ════════════════════════════════════════════
 //  VOLUNTEER VIEW
 // ════════════════════════════════════════════
 function renderVolunteer() {
-  // If no stops set via link, default to North Dallas active stops (demo)
-  if (!volStopsData.length) {
+  // If no stops set via link, default to North Dallas active stops (demo preview only —
+  // no real session token, so delivered/suggestions won't persist to Supabase).
+  if (!volStopsData.length && !currentSessionToken) {
     volStopsData = households.filter(h => h.status==='active' && h.zone==='North Dallas').slice(0,4);
     volName = 'Volunteer';
   }
   $('volTitle').textContent = `📦 DFW ROS — ${volName.split(' ')[0]}'s Stops`;
-  $('volSubtitle').textContent = `Saturday Jun 15 · ${volStopsData.length} stops`;
+  $('volSubtitle').textContent = `${TODAY.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} · ${volStopsData.length} stops`;
 
   const total = volStopsData.length;
   const done  = volDelivered.size;
@@ -2270,7 +2452,7 @@ function renderVolunteer() {
     const delivered = volDelivered.has(h.id);
     return `
       <div class="stop-card ${delivered?'delivered':''}" id="vcard-${h.id}">
-        <div class="stop-hd" onclick="toggleStop(${h.id})">
+        <div class="stop-hd" onclick="toggleStop('${h.id}')">
           <div class="stop-num ${delivered?'done':''}">${delivered ? '✓' : i+1}</div>
           <div class="stop-info">
             <div class="stop-name">${h.name}${delivered?' <span style="color:var(--st-active);font-size:12px;font-weight:500">· Delivered</span>':''}</div>
@@ -2285,10 +2467,10 @@ function renderVolunteer() {
           ${h.health&&h.health!=='None'?`<div class="detail-row"><span class="detail-lbl">🏥 Health</span>${h.health}</div>`:''}
           ${h.notes ? `<div class="notes-box">📌 ${h.notes}</div>` : ''}
           <div class="stop-actions">
-            ${!delivered ? `<button class="btn btn-primary btn-sm" onclick="markDelivered(${h.id})">✓ Mark Delivered</button>` : ''}
+            ${!delivered ? `<button class="btn btn-primary btn-sm" onclick="markDelivered('${h.id}')">✓ Mark Delivered</button>` : ''}
             <a class="map-link" href="https://maps.google.com/?q=${encodeURIComponent(h.address)}" target="_blank">🗺 Open in Maps</a>
             <button class="copy-addr-btn" onclick="copyAddr('${h.address.replace(/'/g,"\\'")}')">📋 Copy Address</button>
-            <button class="suggest-btn" onclick="openSuggest(${h.id})">✏ Suggest Edit</button>
+            <button class="suggest-btn" onclick="openSuggest('${h.id}')">✏ Suggest Edit</button>
           </div>
         </div>
       </div>
@@ -2313,10 +2495,13 @@ function toggleStop(id) {
   chev.style.transform = body.classList.contains('open') ? 'rotate(90deg)' : '';
 }
 
-function markDelivered(id) {
+async function markDelivered(id) {
   volDelivered.add(id);
-  auditLog.unshift({action:'Delivery confirmed', detail:`${volStopsData.find(h=>h.id===id)?.name} marked delivered`, user:volName||'Volunteer', ts:'Just now'});
   renderVolunteer();
+  if (currentSessionToken) {
+    const { error } = await sb.rpc('mark_stop_delivered', { p_token: currentSessionToken, p_household_id: id });
+    if (error) console.error('Failed to record delivery:', error);
+  }
   toast('✓ Delivery recorded.');
 }
 
@@ -2328,7 +2513,7 @@ function copyAddr(addr) {
 let suggestHid = null;
 function openSuggest(hid) {
   suggestHid = hid;
-  $('suggestHouseholdName').textContent = households.find(h => h.id===hid).name;
+  $('suggestHouseholdName').textContent = volStopsData.find(h => h.id===hid).name;
   $('suggestField').value = '';
   $('suggestValue').value = '';
   $('currentValGroup').style.display = 'none';
@@ -2337,7 +2522,7 @@ function openSuggest(hid) {
 
 function updateCurrentVal() {
   const f = $('suggestField').value;
-  const h = households.find(x => x.id===suggestHid);
+  const h = volStopsData.find(x => x.id===suggestHid);
   if (!f || !h) { $('currentValGroup').style.display='none'; return; }
   const map = {address:h.address, size:String(h.size), phone:h.phone, notes:h.notes||'(none)', health:h.health||'(none)', other:''};
   const val = map[f];
@@ -2349,20 +2534,32 @@ function updateCurrentVal() {
   }
 }
 
-function submitSuggestion() {
+async function submitSuggestion() {
   const f = $('suggestField').value;
   const v = $('suggestValue').value.trim();
   if (!f || !v) { toast('⚠️ Select a field and describe the correction.','warn'); return; }
-  const h = households.find(x => x.id===suggestHid);
+  const h = volStopsData.find(x => x.id===suggestHid);
   const labels = {address:'Address',size:'Household Size',phone:'Phone Number',notes:'Delivery Notes',health:'Health Info',other:'Other'};
   const vals   = {address:h.address,size:String(h.size),phone:h.phone,notes:h.notes,health:h.health,other:''};
-  suggestedEdits.push({
-    id:Date.now(), householdId:h.id, householdName:h.name,
-    field:f, fieldLabel:labels[f],
-    currentValue:vals[f]||'—', suggestedValue:v, note:'',
-    submittedBy:volName||'Volunteer', submittedAt:'Just now', status:'pending'
+
+  if (!currentSessionToken) {
+    toast('✏ Suggestion submitted — admin will review.','info');
+    closeModal('suggest');
+    return;
+  }
+
+  const { error } = await sb.rpc('submit_suggested_edit', {
+    p_token: currentSessionToken,
+    p_household_id: h.id,
+    p_field: f,
+    p_field_label: labels[f],
+    p_current_value: vals[f] || '—',
+    p_suggested_value: v,
+    p_note: '',
+    p_submitted_by: volName || 'Volunteer',
   });
-  renderStats();
+  if (error) { console.error(error); toast(`⚠️ Couldn't submit suggestion: ${error.message}`); return; }
+
   closeModal('suggest');
   toast('✏ Suggestion submitted — admin will review.','info');
 }
@@ -2597,7 +2794,7 @@ function renderProfile() {
         <textarea class="notes-textarea" id="newNoteText" placeholder="Add a note about this week's delivery — household changes, observations, anything worth remembering…"></textarea>
         <div class="notes-add-footer">
           <button class="btn btn-primary btn-sm" onclick="addVisitNote()">+ Add Note</button>
-          <span style="font-size:11px;color:var(--text-muted)">Admin (Sonicum)</span>
+          <span style="font-size:11px;color:var(--text-muted)">${currentUser ? currentUser.name : 'Admin'}</span>
         </div>
       </div>
 
@@ -2618,7 +2815,7 @@ function renderNotesList(h) {
         <div class="note-author">${n.author}</div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="note-date">${n.date}</div>
-          <button onclick="deleteNote(${n.id})" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px" title="Delete note">✕</button>
+          <button onclick="deleteNote('${n.id}')" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px" title="Delete note">✕</button>
         </div>
       </div>
       <div class="note-text">${n.text}</div>
@@ -2638,17 +2835,22 @@ function toggleFieldEdit(field) {
   }
 }
 
-function saveField(field) {
+async function saveField(field) {
   const h = households.find(x => x.id === profileHouseholdId);
   if (!h) return;
+  const today = new Date().toISOString().slice(0,10);
 
   if (field === 'size') {
     const newSize = parseInt($('finput-size').value) || h.size;
     const newAdolescents = parseInt($('finput-adolescents').value) || 0;
+    const { error } = await sb.from('households').update({ size: newSize, adolescents: newAdolescents, packs: packsFor(newSize) }).eq('id', h.dbId);
+    if (error) { console.error(error); toast(`⚠️ Couldn't save: ${error.message}`); return; }
+
     h.size = newSize;
     h.adolescents = newAdolescents;
-    h.lastUpdated = '2024-06-15';
-    auditLog.unshift({action:'Field updated', detail:`${h.name}: Household size → ${newSize} people, ${newAdolescents} adolescents`, user:'Admin', ts:'Just now'});
+    h.packs = packsFor(newSize);
+    h.lastUpdated = today;
+    await logAudit('Field updated', `${h.name}: Household size → ${newSize} people, ${newAdolescents} adolescents`);
     $('fedit-size').classList.remove('open');
     renderProfile();
     renderAll();
@@ -2659,11 +2861,15 @@ function saveField(field) {
   const input = $(`finput-${field}`);
   if (!input) return;
   const val = input.value.trim();
-  const old = h[field];
+  const columns = {address:'address', phone:'phone', deliveryWindow:'delivery_window', notes:'notes', health:'health', dietary:'dietary'};
+  const column = columns[field] || field;
+  const { error } = await sb.from('households').update({ [column]: val || null }).eq('id', h.dbId);
+  if (error) { console.error(error); toast(`⚠️ Couldn't save: ${error.message}`); return; }
+
   h[field] = val;
-  h.lastUpdated = '2024-06-15';
+  h.lastUpdated = today;
   const labels = {address:'Address',phone:'Phone',deliveryWindow:'Delivery window',notes:'Delivery notes',health:'Health info',dietary:'Dietary restrictions'};
-  auditLog.unshift({action:'Field updated', detail:`${h.name}: ${labels[field]||field} updated`, user:'Admin', ts:'Just now'});
+  await logAudit('Field updated', `${h.name}: ${labels[field]||field} updated`);
   $(`fedit-${field}`).classList.remove('open');
   // Update displayed value
   const valEl = $(`fval-${field}`);
@@ -2672,25 +2878,32 @@ function saveField(field) {
   toast(`✓ ${labels[field]||field} updated.`);
 }
 
-function addVisitNote() {
+async function addVisitNote() {
   const text = $('newNoteText').value.trim();
   if (!text) { toast('⚠️ Note is empty.', 'warn'); return; }
   const h = households.find(x => x.id === profileHouseholdId);
   if (!h) return;
+  const author = currentUser ? currentUser.name : 'Admin';
+
+  const { data, error } = await sb.from('visit_notes').insert({ household_id: h.dbId, text, author }).select('id, created_at').single();
+  if (error) { console.error(error); toast(`⚠️ Couldn't add note: ${error.message}`); return; }
+
   if (!h.visitNotes) h.visitNotes = [];
-  const note = {id: Date.now(), text, author:'Admin (Sonicum)', date:'Jun 15, 2024'};
-  h.visitNotes.push(note);
-  h.lastUpdated = '2024-06-15';
-  auditLog.unshift({action:'Visit note added', detail:`${h.name}: note by Admin`, user:'Admin', ts:'Just now'});
+  h.visitNotes.push({ id: data.id, text, author, date: (data.created_at || '').slice(0, 10) });
+  h.lastUpdated = new Date().toISOString().slice(0,10);
+  await logAudit('Visit note added', `${h.name}: note by ${author}`);
   $('newNoteText').value = '';
   $('notesList').innerHTML = renderNotesList(h);
   renderAll();
   toast('✓ Note added.');
 }
 
-function deleteNote(noteId) {
+async function deleteNote(noteId) {
   const h = households.find(x => x.id === profileHouseholdId);
   if (!h) return;
+  const { error } = await sb.from('visit_notes').delete().eq('id', noteId);
+  if (error) { console.error(error); toast(`⚠️ Couldn't remove note: ${error.message}`); return; }
+
   h.visitNotes = h.visitNotes.filter(n => n.id !== noteId);
   $('notesList').innerHTML = renderNotesList(h);
   toast('Note removed.', 'info');
@@ -2704,7 +2917,7 @@ function renderAll() {
 // ── Boot ──
 // Volunteer magic link takes priority
 const _volParams = new URLSearchParams(window.location.search);
-if (_volParams.get('vol') && _volParams.get('stops')) {
+if (_volParams.get('session')) {
   $('loginScreen').style.display = 'none';
   $('adminShell').style.display  = 'none';
   parseURLOnLoad();
