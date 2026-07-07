@@ -1,13 +1,3 @@
-mkdir dfw-ros
-cd dfw-ros
-git init
-git remote add origin https://github.com/yourusername/dfw-ros.git
-dfw-ros/
-  index.html   (or dfw_ros_v14.html)
-  supabase/
-    migrations/
-      20260703000000_init_schema.sql
-      20260703000001_rls_and_rpc.sql
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -802,53 +792,28 @@ tr.row-archived td{opacity:.6}
 
 <div class="toast-wrap" id="toastWrap"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+// ════════════════════════════════════════════
+//  SUPABASE CONNECTION
+// ════════════════════════════════════════════
+const sb = window.supabase.createClient(
+  'https://jxtbcordbvjdmyrctpby.supabase.co',
+  'sb_publishable_M-h2q2-yku0wsFaIkp5O5A_MBeRsSWc'
+);
+
 // ════════════════════════════════════════════
 //  DATA
 // ════════════════════════════════════════════
-const TODAY = new Date('2024-06-15');
+const TODAY = new Date();
 
-// Coordinates tuned so clusters are obvious in the demo:
-// Al-Hassan & Karimi → very close (same North Dallas area)
-// Okonkwo & Abdullah → very close (same Plano corridor)
-// All others → isolated
-let households = [
-  {id:1, name:'Al-Hassan Family',   address:'1234 Park Ln Apt 201, Dallas TX 75204',     zone:'North Dallas',  size:5, adolescents:2, health:'Mobility impairment (father)',           dietary:'Halal only',         phone:'214-555-0101', deliveryWindow:'9am–12pm',  packs:3, status:'active',   inactiveReason:null, timesServed:18, lastUpdated:'2024-06-15', notes:'Gate code #2847. Ring bell twice.',         lat:32.801, lng:-96.788,
-    visitNotes:[
-      {id:1, text:"Family was home. Father's mobility has noticeably worsened — may want to flag for ground-floor priority in future logistics.",           author:'Admin (Sonicum)', date:'2024-06-15'},
-      {id:2, text:"Mother mentioned the gate code recently changed. Updated in delivery notes.",                                                             author:'Fatima (Volunteer)', date:'2024-06-08'},
-      {id:3, text:"3 children confirmed at home. Mother says a relative may be moving in next month — household size could increase to 6 or 7.",            author:'Admin (Sonicum)', date:'2024-05-25'},
-    ]},
-  {id:2, name:'Okonkwo Family',     address:'589 Maple Ave, Plano TX 75023',              zone:'Plano/Allen',   size:4, adolescents:1, health:'None',                                  dietary:'No pork',            phone:'214-555-0202', deliveryWindow:'10am–1pm',  packs:2, status:'active',   inactiveReason:null, timesServed:7,  lastUpdated:'2024-06-08', notes:'Leave at front door if no answer.',        lat:33.019, lng:-96.699,
-    visitNotes:[
-      {id:1, text:"No one home — left basket at front door as instructed. Called ahead, no answer.",  author:'Ahmed (Volunteer)', date:'2024-06-08'},
-      {id:2, text:"Family was home this week. Father confirmed dietary restriction: no pork.",         author:'Admin (Sonicum)',    date:'2024-05-18'},
-    ]},
-  {id:3, name:'Karimi Family',      address:'2301 Skillman St #44, Dallas TX 75206',      zone:'North Dallas',  size:7, adolescents:3, health:'Elderly grandmother (limited mobility)', dietary:'Halal, low sodium',  phone:'214-555-0303', deliveryWindow:'8am–11am',  packs:4, status:'active',   inactiveReason:null, timesServed:24, lastUpdated:'2024-05-20', notes:'3rd floor, no elevator.',                  lat:32.803, lng:-96.787,
-    visitNotes:[
-      {id:1, text:"Grandmother answered the door. Mentioned unit number may have changed to #48 — confirm next visit.",  author:'Ahmed (Volunteer)', date:'2024-06-15'},
-      {id:2, text:"Low-sodium dietary note added — grandmother is on a restricted diet per doctor's orders.",             author:'Admin (Sonicum)',    date:'2024-04-30'},
-    ]},
-  {id:4, name:'Diallo Family',      address:'4412 Camp Wisdom Rd, Fort Worth TX 76116',   zone:'Fort Worth',    size:3, adolescents:0, health:'None',                                  dietary:'None',               phone:'817-555-0404', deliveryWindow:'11am–2pm',  packs:2, status:'active',   inactiveReason:null, timesServed:5,  lastUpdated:'2024-06-10', notes:'',                                         lat:32.680, lng:-97.430,
-    visitNotes:[]},
-  {id:5, name:'Nguyen Family',      address:'807 Audelia Rd Apt 12B, Dallas TX 75218',    zone:'North Dallas',  size:2, adolescents:0, health:'None',                                  dietary:'No beef',            phone:'214-555-0505', deliveryWindow:'12pm–3pm',  packs:1, status:'inactive', inactiveReason:'employment', timesServed:31, lastUpdated:'2024-05-01', notes:'Graduated — found stable employment.',   lat:32.860, lng:-96.690,
-    visitNotes:[
-      {id:1, text:"Family shared they've both found stable employment. Grateful for the support over the past year. Graduated from the program.",  author:'Admin (Sonicum)', date:'2024-05-01'},
-    ]},
-  {id:6, name:'Rahman Family',      address:'1890 W Commerce St, Dallas TX 75208',        zone:'South Dallas',  size:6, adolescents:4, health:'Mental health (mother)',                dietary:'Halal',              phone:'214-555-0606', deliveryWindow:'9am–12pm',  packs:3, status:'active',   inactiveReason:null, timesServed:12, lastUpdated:'2024-06-14', notes:'Intercom code 306. Call before arriving.', lat:32.748, lng:-96.840,
-    visitNotes:[
-      {id:1, text:"Called ahead — mother requested we ring the intercom first before buzzing. Kids were very excited about the fruit this week.",  author:'Yusuf (Volunteer)', date:'2024-06-14'},
-      {id:2, text:"Two new relatives may have moved in — household size may have increased to 8. Flagged for admin review.",                       author:'Yusuf (Volunteer)', date:'2024-06-07'},
-    ]},
-  {id:7, name:'Morales Family',     address:'3322 S Lamar St, Dallas TX 75215',           zone:'South Dallas',  size:4, adolescents:2, health:'Disability (child, wheelchair)',         dietary:'No tree nuts',       phone:'214-555-0707', deliveryWindow:'10am–1pm',  packs:2, status:'inactive', inactiveReason:'wrong-address', timesServed:3, lastUpdated:'2024-04-12', notes:'Address may be wrong — needs verification.', lat:32.756, lng:-96.792,
-    visitNotes:[
-      {id:1, text:"Went to the address — building exists but family name not on any unit. Attempted to call, no answer. Flagged for admin.",  author:'Ibrahim (Volunteer)', date:'2024-04-12'},
-    ]},
-  {id:8, name:'Abdullah Family',    address:'962 Coit Rd #108, Plano TX 75075',           zone:'Plano/Allen',   size:5, adolescents:2, health:'None',                                  dietary:'Halal, no shellfish', phone:'972-555-0808', deliveryWindow:'9am–12pm',  packs:3, status:'active',  inactiveReason:null, timesServed:9,  lastUpdated:'2024-06-12', notes:'Gate code: #4422.',                        lat:33.021, lng:-96.697,
-    visitNotes:[
-      {id:1, text:"Gate code confirmed working. Family has a new baby — they mentioned needing baby food if ever available.",  author:'Ahmed (Volunteer)', date:'2024-06-12'},
-    ]},
-];
+// Household data now lives in Supabase. This array is populated at runtime
+// by loadHouseholdsFromSupabase() — see the SUPABASE DATA LOADING section below.
+// NOTE: household.id here is a small integer assigned client-side purely so
+// all the existing onclick="...(${h.id})" handlers throughout this file keep
+// working unchanged. The real database UUID is kept on h.dbId for any
+// Supabase read/write calls.
+let households = [];
 
 let suggestedEdits = [
   {id:1, householdId:3, householdName:'Karimi Family',    field:'address', fieldLabel:'Address',        currentValue:'2301 Skillman St #44, Dallas TX 75206', suggestedValue:'2301 Skillman St #48, Dallas TX 75206', note:"They've moved to unit 48, same floor.", submittedBy:'Ahmed (Volunteer)',  submittedAt:'Jun 15 · 10:23 AM', status:'pending'},
@@ -905,6 +870,58 @@ function daysSince(dateStr) {
 }
 function isStale(h) { return daysSince(h.lastUpdated) >= 25 && h.status === 'active'; }
 function packsFor(size) { return Math.max(1, Math.ceil(size / 2)); }
+
+// ════════════════════════════════════════════
+//  SUPABASE DATA LOADING (reads)
+// ════════════════════════════════════════════
+// Pulls households + their zone name + their visit notes from Supabase and
+// reshapes them into exactly the field names the rest of this file expects
+// (camelCase, zone as a name string, visitNotes as a nested array, etc).
+async function loadHouseholdsFromSupabase() {
+  const { data, error } = await sb
+    .from('households')
+    .select(`
+      id, name, address, lat, lng, size, adolescents, health, dietary,
+      phone, delivery_window, packs, status, inactive_reason, times_served,
+      notes, last_updated,
+      zones ( name ),
+      visit_notes ( id, text, author, created_at )
+    `)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Failed to load households from Supabase:', error);
+    toast('⚠️ Could not load households from the database.');
+    households = [];
+    return;
+  }
+
+  households = (data || []).map((row, idx) => ({
+    id: idx + 1,                 // client-side integer id — keeps existing onclick(...) handlers working
+    dbId: row.id,                // real Supabase UUID — use this for any future writes
+    name: row.name,
+    address: row.address,
+    zone: row.zones ? row.zones.name : '',
+    size: row.size,
+    adolescents: row.adolescents,
+    health: row.health || 'None',
+    dietary: row.dietary || 'None',
+    phone: row.phone,
+    deliveryWindow: row.delivery_window,
+    packs: row.packs,
+    status: row.status,
+    inactiveReason: row.inactive_reason,
+    timesServed: row.times_served,
+    lastUpdated: (row.last_updated || '').slice(0, 10), // YYYY-MM-DD, matches daysSince()/fmt()
+    notes: row.notes || '',
+    lat: row.lat,
+    lng: row.lng,
+    visitNotes: (row.visit_notes || [])
+      .slice()
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((n, i) => ({ id: i + 1, text: n.text, author: n.author, date: (n.created_at || '').slice(0, 10) })),
+  }));
+}
 
 const POSITIVE_REASONS = ['snap','employment','self-sufficient'];
 const REASON_LABELS = {snap:'SNAP',employment:'Employment',moved:'Moved','self-sufficient':'Self-sufficient','wrong-address':'Wrong address',unresponsive:'Unresponsive',request:'Requested removal',other:'Other'};
@@ -1993,7 +2010,7 @@ function handleLogin() {
   }, 600);
 }
 
-function enterAdmin() {
+async function enterAdmin() {
   // Update sidebar user info
   $('userName').textContent    = currentUser.name;
   $('userAvatar').textContent  = currentUser.initials;
@@ -2001,6 +2018,9 @@ function enterAdmin() {
   // Hide login, show admin
   $('loginScreen').style.display  = 'none';
   $('adminShell').style.display   = 'flex';
+
+  $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
+  await loadHouseholdsFromSupabase();
 
   renderAll();
   toast(`Welcome back, ${currentUser.name}! 👋`);
@@ -2521,7 +2541,4 @@ if (_volParams.get('vol') && _volParams.get('stops')) {
 }
 </script>
 </body>
-</html>git add .
-git commit -m "Initial commit: DFW ROS demo app + Supabase schema"
-git branch -M main
-git push -u origin main
+</html>
