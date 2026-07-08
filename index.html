@@ -93,6 +93,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;background:var(--surface);font-size:13px}
 th{background:var(--surface-2);color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+th.th-sort{cursor:pointer;user-select:none}
+th.th-sort:hover{color:var(--text)}
+.sort-ind{display:inline-block;margin-left:4px;font-size:10px;color:var(--accent)}
 td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--surface-2)}
@@ -531,7 +534,15 @@ tr.row-archived td{opacity:.6}
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Family</th><th>Zone</th><th>Size</th><th>Packs</th><th>Health</th><th>Status</th><th>Last Updated</th><th>Times Served</th><th></th></tr></thead>
+          <thead><tr>
+            <th class="th-sort" onclick="setSort('name')">Family<span class="sort-ind" id="sort-ind-name"></span></th>
+            <th class="th-sort" onclick="setSort('zone')">Zone<span class="sort-ind" id="sort-ind-zone"></span></th>
+            <th class="th-sort" onclick="setSort('size')">Size<span class="sort-ind" id="sort-ind-size"></span></th>
+            <th>Packs</th><th>Health</th><th>Status</th>
+            <th class="th-sort" onclick="setSort('lastUpdated')">Last Updated<span class="sort-ind" id="sort-ind-lastUpdated"></span></th>
+            <th class="th-sort" onclick="setSort('timesServed')">Times Served<span class="sort-ind" id="sort-ind-timesServed"></span></th>
+            <th></th>
+          </tr></thead>
           <tbody id="householdTbody"></tbody>
         </table>
       </div>
@@ -889,7 +900,9 @@ const CLUSTER_PALETTE = [
 
 // ── App state ──
 let activeFilter   = 'all';
+let tableSort      = { col: null, dir: 1 };
 let activeThreshold = 0.012;
+const MAX_STOPS_PER_VOLUNTEER = 6; // a volunteer shouldn't be handed more stops than fit in one reasonable trip
 let sessionClusters = [];          // array of arrays of household objects
 let clusterAssignments = {};       // clusterIdx → volunteer name
 let generatedLinks = [];           // [{vol, stopIds, url}]
@@ -1222,7 +1235,7 @@ function renderTable() {
   const search = $('searchBox').value.toLowerCase();
   const zone   = $('zoneFilter').value;
 
-  const rows = households.filter(h => {
+  let rows = households.filter(h => {
     if (activeFilter === 'active'   && h.status !== 'active')   return false;
     if (activeFilter === 'inactive' && h.status !== 'inactive') return false;
     if (activeFilter === 'stale'    && !isStale(h))             return false;
@@ -1230,6 +1243,9 @@ function renderTable() {
     if (search && !h.name.toLowerCase().includes(search) && !h.address.toLowerCase().includes(search)) return false;
     return true;
   });
+
+  rows = sortRows(rows);
+  updateSortIndicators();
 
   if (!rows.length) {
     $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No households match this filter.</td></tr>`;
@@ -1265,6 +1281,40 @@ function renderTable() {
       </td>
     </tr>
   `).join('');
+}
+
+const SORT_GETTERS = {
+  name:         h => h.name.toLowerCase(),
+  zone:         h => h.zone.toLowerCase(),
+  size:         h => h.size,
+  lastUpdated:  h => h.lastUpdated,
+  timesServed:  h => h.timesServed,
+};
+
+function setSort(col) {
+  if (tableSort.col === col) tableSort.dir *= -1;
+  else { tableSort.col = col; tableSort.dir = 1; }
+  renderTable();
+}
+
+function sortRows(rows) {
+  if (!tableSort.col) return rows;
+  const get = SORT_GETTERS[tableSort.col];
+  const dir = tableSort.dir;
+  return [...rows].sort((a, b) => {
+    const av = get(a), bv = get(b);
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+}
+
+function updateSortIndicators() {
+  Object.keys(SORT_GETTERS).forEach(col => {
+    const el = $(`sort-ind-${col}`);
+    if (!el) return;
+    el.textContent = tableSort.col === col ? (tableSort.dir === 1 ? '▲' : '▼') : '';
+  });
 }
 
 function toggleMenu(id) { closeMenus(); $(`menu-${id}`).classList.toggle('open'); }
@@ -1727,7 +1777,8 @@ function runClustering() {
 
   const raw = clusterByProximity(pool, activeThreshold);
   const sequenced = sequenceClusters(raw);
-  sessionClusters = sequenced.map(c => sortWithinCluster(c));
+  const sorted = sequenced.map(c => sortWithinCluster(c));
+  sessionClusters = capClusters(sorted);
   clusterAssignments = {};
   generatedLinks = [];
   skippedStops = [];
@@ -1736,6 +1787,20 @@ function runClustering() {
 
   renderClusterCards();
   toast(`⚡ ${pool.length} stops grouped into ${sessionClusters.length} cluster${sessionClusters.length>1?'s':''}.`);
+}
+
+// Keeps any single cluster from handing one volunteer more than MAX_STOPS_PER_VOLUNTEER
+// stops — splits an oversized proximity group into consecutive chunks (order preserved,
+// so each chunk is still a contiguous, geographically-sensible sub-route).
+function capClusters(clusters) {
+  const result = [];
+  for (const c of clusters) {
+    if (c.length <= MAX_STOPS_PER_VOLUNTEER) { result.push(c); continue; }
+    for (let i = 0; i < c.length; i += MAX_STOPS_PER_VOLUNTEER) {
+      result.push(c.slice(i, i + MAX_STOPS_PER_VOLUNTEER));
+    }
+  }
+  return result;
 }
 
 // ── Stop editing state ──
@@ -1927,6 +1992,7 @@ function renderClusterCards() {
               <span>· ${clusterPacks} packs</span>
             </div>
           </div>
+          ${cluster.length > MAX_STOPS_PER_VOLUNTEER ? `<span class="badge b-stale" title="More than ${MAX_STOPS_PER_VOLUNTEER} stops is a lot for one volunteer to handle in one trip">⚠ Over ${MAX_STOPS_PER_VOLUNTEER}-stop cap</span>` : ''}
         </div>
 
         <!-- Stops -->
@@ -2072,6 +2138,13 @@ async function generateLinks() {
     if (!byVol[vol]) byVol[vol] = [];
     byVol[vol].push(...cluster);
   });
+
+  const overCap = Object.entries(byVol).filter(([, stops]) => stops.length > MAX_STOPS_PER_VOLUNTEER);
+  if (overCap.length) {
+    const [firstVol, firstStops] = overCap[0];
+    toast(`⚠️ ${firstVol} is assigned ${firstStops.length} stops — the cap is ${MAX_STOPS_PER_VOLUNTEER} per volunteer. Split or reassign a cluster before generating links.`, 'warn');
+    return;
+  }
 
   const base = window.location.href.split('?')[0];
   const expiresAt = new Date(Date.now() + 7*86400000).toISOString();
@@ -2369,11 +2442,17 @@ function renderVolunteer() {
   }).join('');
 
   if (done === total && total > 0) {
+    const totalPacks = volStopsData.reduce((s,h) => s+packsFor(h.size), 0);
     $('volContent').innerHTML += `
       <div class="vol-summary">
         <div style="font-size:36px;margin-bottom:10px">🎉</div>
         <div style="font-size:17px;font-weight:700;margin-bottom:4px">All deliveries complete!</div>
-        <div style="font-size:13px;color:var(--text-muted)">JazakAllah khair — great work today, ${volName.split(' ')[0]}.</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">JazakAllah khair — great work today, ${volName.split(' ')[0]}.</div>
+        <div style="display:flex;justify-content:center;gap:28px;padding-top:16px;border-top:1px solid var(--border)">
+          <div><div class="ssv" style="color:var(--accent)">${done}</div><div class="ssl">Delivered</div></div>
+          <div><div class="ssv">${totalPacks}</div><div class="ssl">Packs</div></div>
+          <div><div class="ssv" style="font-size:14px">${TODAY.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div><div class="ssl">Date</div></div>
+        </div>
       </div>
     `;
   }
