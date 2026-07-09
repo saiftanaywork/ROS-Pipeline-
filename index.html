@@ -3195,7 +3195,10 @@ function renderVolunteer() {
   // If no stops set via link, default to North Dallas active stops (demo preview only —
   // no real session token, so delivered/suggestions won't persist to Supabase).
   if (!volStopsData.length && !currentSessionToken) {
-    volStopsData = households.filter(h => h.status==='active' && h.zone==='North Dallas').slice(0,4);
+    // Normalize id to a string here — real sessions (via get_volunteer_stops) always
+    // use string UUIDs, and onclick="...('${h.id}')" handlers below always stringify,
+    // so a numeric id here would silently fail every h.id===hid lookup (e.g. Suggest Edit).
+    volStopsData = households.filter(h => h.status==='active' && h.zone==='North Dallas').slice(0,4).map(h => ({...h, id: String(h.id)}));
     volName = 'Volunteer';
   }
   $('volTitle').textContent = `📦 DFW ROS — ${volName.split(' ')[0]}'s Stops`;
