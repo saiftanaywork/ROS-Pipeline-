@@ -540,15 +540,6 @@ tr.row-archived td{opacity:.6}
         <div id="checkinDietaryWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewDietary" placeholder="Describe the change"></div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Any changes to health or accessibility needs?</label>
-        <select class="form-select" id="checkinHealth" onchange="document.getElementById('checkinHealthWrap').style.display = this.value==='yes' ? '' : 'none'">
-          <option value="no">No changes</option>
-          <option value="yes">Yes, something's changed</option>
-        </select>
-        <div id="checkinHealthWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewHealth" placeholder="Describe the change"></div>
-      </div>
-
       <div class="form-group"><label class="form-label">Anything else we should know?</label><textarea class="form-textarea" id="checkinNotes" placeholder="Optional"></textarea></div>
 
       <button class="login-btn" id="checkinBtn" onclick="submitCheckinResponse()">Submit →</button>
@@ -642,7 +633,7 @@ tr.row-archived td{opacity:.6}
             <th class="th-sort" onclick="setSort('name')">Family<span class="sort-ind" id="sort-ind-name"></span></th>
             <th class="th-sort" onclick="setSort('zone')">Zone<span class="sort-ind" id="sort-ind-zone"></span></th>
             <th class="th-sort" onclick="setSort('size')">Size<span class="sort-ind" id="sort-ind-size"></span></th>
-            <th>Packs</th><th>Health</th><th>Status</th>
+            <th>Packs</th><th>Dietary</th><th>Status</th>
             <th class="th-sort" onclick="setSort('lastUpdated')">Last Updated<span class="sort-ind" id="sort-ind-lastUpdated"></span></th>
             <th class="th-sort" onclick="setSort('timesServed')">Times Served<span class="sort-ind" id="sort-ind-timesServed"></span></th>
             <th></th>
@@ -915,7 +906,7 @@ tr.row-archived td{opacity:.6}
           <option value="size">Household size</option>
           <option value="phone">Phone number</option>
           <option value="notes">Delivery notes / gate code</option>
-          <option value="health">Health / accessibility info</option>
+          <option value="dietary">Dietary restrictions</option>
           <option value="other">Other</option>
         </select>
       </div>
@@ -946,10 +937,9 @@ tr.row-archived td{opacity:.6}
         <div class="form-group"><label class="form-label">Zone</label><select class="form-select" id="newZone"></select></div>
         <div class="form-group"><label class="form-label">Household Size</label><input class="form-input" id="newSize" type="number" min="1" max="20" value="4"></div>
       </div>
-      <div class="form-group"><label class="form-label">Health / Accessibility Notes</label><input class="form-input" id="newHealth" placeholder="e.g. Mobility impairment, elderly…"></div>
       <div class="form-group"><label class="form-label">Dietary Restrictions</label><input class="form-input" id="newDietary" placeholder="e.g. Halal only, no pork…"></div>
       <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="newPhone" placeholder="214-555-0000"></div>
-      <div class="form-group"><label class="form-label">Delivery Notes</label><textarea class="form-textarea" id="newNotes" placeholder="Gate codes, floor, special instructions…"></textarea></div>
+      <div class="form-group"><label class="form-label">Delivery Notes</label><textarea class="form-textarea" id="newNotes" placeholder="Gate codes, floor, mobility/accessibility needs, any other special instructions…"></textarea></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('addHousehold')">Cancel</button>
@@ -965,7 +955,7 @@ tr.row-archived td{opacity:.6}
     <div class="modal-body">
       <div id="bulkImportUploadStep">
         <div class="info-box">
-          Download the template, fill in one row per household (same fields as "Add Single Household"), then drop the file back in below. <strong>Name, Address, Household Size, Zone, and Phone</strong> are required — rows missing any of those, or duplicating an existing address, will be flagged and skipped. Health, Dietary, and Delivery Notes are optional; missing ones just get a heads-up before import. <strong>Zone</strong> must match one of the existing zone names exactly.
+          Download the template, fill in one row per household (same fields as "Add Single Household"), then drop the file back in below. <strong>Name, Address, Household Size, Zone, and Phone</strong> are required — rows missing any of those, or duplicating an existing address, will be flagged and skipped. Dietary and Delivery Notes are optional; missing ones just get a heads-up before import. <strong>Zone</strong> must match one of the existing zone names exactly.
         </div>
         <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="downloadImportTemplate()">⬇ Download CSV Template</button>
         <div class="dropzone" id="importDropzone" onclick="document.getElementById('importFileInput').click()">
@@ -1168,7 +1158,7 @@ async function loadHouseholdsFromSupabase() {
   const { data, error } = await sb
     .from('households')
     .select(`
-      id, name, address, lat, lng, size, adolescents, health, dietary,
+      id, name, address, lat, lng, size, adolescents, dietary,
       phone, delivery_window, packs, status, inactive_reason, times_served,
       notes, last_updated,
       zones ( name ),
@@ -1191,7 +1181,6 @@ async function loadHouseholdsFromSupabase() {
     zone: row.zones ? row.zones.name : '',
     size: row.size,
     adolescents: row.adolescents,
-    health: row.health || 'None',
     dietary: row.dietary || 'None',
     phone: row.phone,
     deliveryWindow: row.delivery_window,
@@ -1580,7 +1569,7 @@ function renderTable() {
       <td><span class="chip">${h.zone}</span></td>
       <td>${h.size} people<br><span style="font-size:11px;color:var(--text-muted)">${h.adolescents} adolescents</span></td>
       <td><strong>${packsFor(h.size)}</strong></td>
-      <td style="font-size:12px;color:var(--text-muted);max-width:160px">${h.health||'—'}</td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:160px">${h.dietary||'—'}</td>
       <td>${statusBadge(h)}</td>
       <td style="font-size:12px;color:${isStale(h)?'var(--st-stale)':'var(--text-muted)'}">${fmt(h.lastUpdated)}</td>
       <td style="font-size:13px">${h.timesServed}${h.timesServed>=20&&h.status==='active'?' 🎓':''}</td>
@@ -1728,7 +1717,6 @@ async function addHousehold() {
   const { error } = await sb.from('households').insert({
     name, address: addr, zone_id: zone.id,
     size, adolescents: 0,
-    health: $('newHealth').value || null,
     dietary: $('newDietary').value || null,
     phone: $('newPhone').value || null,
     packs: packsFor(size),
@@ -1748,7 +1736,7 @@ async function addHousehold() {
 // ════════════════════════════════════════════
 //  BULK IMPORT (CSV)
 // ════════════════════════════════════════════
-const IMPORT_COLUMNS = ['Name','Address','Zone','Household Size','Adolescents','Health','Dietary','Phone','Delivery Notes'];
+const IMPORT_COLUMNS = ['Name','Address','Zone','Household Size','Adolescents','Dietary','Phone','Delivery Notes'];
 let bulkImportRows = []; // parsed + validated rows, ready to insert
 
 // Minimal CSV parser — handles quoted fields (with embedded commas/newlines)
@@ -1776,7 +1764,7 @@ function parseCSV(text) {
 }
 
 function downloadImportTemplate() {
-  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','Mobility impairment, elderly','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
+  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
   const csv = [IMPORT_COLUMNS, example].map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
@@ -1810,7 +1798,7 @@ async function handleImportFile(file) {
   const idx = {
     name: col('Name'), address: col('Address'), zone: col('Zone'),
     size: col('Household Size'), adolescents: col('Adolescents'),
-    health: col('Health'), dietary: col('Dietary'), phone: col('Phone'),
+    dietary: col('Dietary'), phone: col('Phone'),
     notes: col('Delivery Notes'),
   };
   if (idx.name === -1 || idx.address === -1) {
@@ -1829,7 +1817,6 @@ async function handleImportFile(file) {
     const phone = get(idx.phone);
     const sizeRaw = get(idx.size);
     const size = parseInt(sizeRaw) || 0;
-    const health = get(idx.health);
     const dietary = get(idx.dietary);
     const notes = get(idx.notes);
 
@@ -1860,14 +1847,12 @@ async function handleImportFile(file) {
 
     // Optional/lesser fields — missing is fine, but we'll flag it in a summary notice
     const warnings = [];
-    if (!health) warnings.push('health');
     if (!dietary) warnings.push('dietary');
     if (!notes) warnings.push('delivery notes');
 
     return {
       name, address, zoneName, zone, size,
       adolescents: parseInt(get(idx.adolescents)) || 0,
-      health: health || null,
       dietary: dietary || null,
       phone: phone || null,
       notes: notes || null,
@@ -1879,7 +1864,7 @@ async function handleImportFile(file) {
 
   const missingOptionalCount = bulkImportRows.filter(r => !r.errors.length && r.warnings.length).length;
   if (missingOptionalCount) {
-    showAlertModal('ℹ️ Some Optional Info Is Missing', `<p>${missingOptionalCount} row${missingOptionalCount!==1?'s are':' is'} missing optional details like health notes, dietary restrictions, or delivery notes.</p><p style="margin-top:10px">That's fine — they'll still import. You (or a volunteer) can fill those in later from the household's profile.</p>`);
+    showAlertModal('ℹ️ Some Optional Info Is Missing', `<p>${missingOptionalCount} row${missingOptionalCount!==1?'s are':' is'} missing optional details like dietary restrictions or delivery notes.</p><p style="margin-top:10px">That's fine — they'll still import. You (or a volunteer) can fill those in later from the household's profile.</p>`);
   }
 }
 
@@ -1917,7 +1902,7 @@ async function submitBulkImport() {
     const c = ZONE_CENTROIDS[r.zone.name] || {lat:32.78, lng:-96.80};
     return {
       name: r.name, address: r.address, zone_id: r.zone.id,
-      size: r.size, adolescents: r.adolescents, health: r.health, dietary: r.dietary,
+      size: r.size, adolescents: r.adolescents, dietary: r.dietary,
       phone: r.phone, notes: r.notes, packs: packsFor(r.size),
       lat: c.lat + (Math.random()-0.5)*0.02,
       lng: c.lng + (Math.random()-0.5)*0.02,
@@ -2011,7 +1996,7 @@ async function confirmApprove() {
   const h = households.find(x => x.dbId===e.householdDbId);
 
   if (h) {
-    const columns = {address:'address', size:'size', phone:'phone', notes:'notes', health:'health', other:'notes'};
+    const columns = {address:'address', size:'size', phone:'phone', notes:'notes', dietary:'dietary', other:'notes'};
     const column = columns[e.field] || 'notes';
     const value = e.field==='size' ? parseInt(e.suggestedValue) : e.suggestedValue;
     const { error } = await sb.from('households').update({ [column]: value }).eq('id', h.dbId);
@@ -2329,8 +2314,8 @@ async function submitCheckinResponse() {
     p_new_size: newSize,
     p_dietary_changed: $('checkinDietary').value,
     p_new_dietary: $('checkinDietary').value === 'yes' ? ($('checkinNewDietary').value.trim() || null) : null,
-    p_health_changed: $('checkinHealth').value,
-    p_new_health: $('checkinHealth').value === 'yes' ? ($('checkinNewHealth').value.trim() || null) : null,
+    p_health_changed: 'no',
+    p_new_health: null,
     p_notes: $('checkinNotes').value.trim() || null,
   });
 
@@ -3099,7 +3084,7 @@ async function loadVolunteerSession(token, displayName) {
   volStopsData = data.map(r => ({
     id: r.household_id, dbId: r.household_id, name: r.name, address: r.address,
     lat: r.lat, lng: r.lng, size: r.size, adolescents: r.adolescents, packs: r.packs,
-    health: r.health, dietary: r.dietary, notes: r.notes, deliveryWindow: r.delivery_window,
+    dietary: r.dietary, notes: r.notes, deliveryWindow: r.delivery_window,
   }));
   volDelivered = new Set(data.filter(r => r.delivered).map(r => r.household_id));
   volName = displayName || 'Volunteer';
@@ -3254,7 +3239,6 @@ function renderVolunteer() {
           <div class="detail-row"><span class="detail-lbl">📦 Packs</span><strong>${packsFor(h.size)}</strong></div>
           <div class="detail-row"><span class="detail-lbl">👥 Household</span>${h.size} people, ${h.adolescents} adolescents</div>
           <div class="detail-row"><span class="detail-lbl">🍽 Dietary</span>${h.dietary||'None listed'}</div>
-          ${h.health&&h.health!=='None'?`<div class="detail-row"><span class="detail-lbl">🏥 Health</span>${h.health}</div>`:''}
           ${h.notes ? `<div class="notes-box">📌 ${h.notes}</div>` : ''}
           <div class="stop-actions">
             ${!delivered ? `<button class="btn btn-primary btn-sm" onclick="markDelivered('${h.id}')">✓ Mark Delivered</button>` : ''}
@@ -3320,7 +3304,7 @@ function updateCurrentVal() {
   const f = $('suggestField').value;
   const h = volStopsData.find(x => x.id===suggestHid);
   if (!f || !h) { $('currentValGroup').style.display='none'; return; }
-  const map = {address:h.address, size:String(h.size), phone:h.phone, notes:h.notes||'(none)', health:h.health||'(none)', other:''};
+  const map = {address:h.address, size:String(h.size), phone:h.phone, notes:h.notes||'(none)', dietary:h.dietary||'(none)', other:''};
   const val = map[f];
   if (val !== undefined && val !== '') {
     $('currentValGroup').style.display = 'block';
@@ -3335,8 +3319,8 @@ async function submitSuggestion() {
   const v = $('suggestValue').value.trim();
   if (!f || !v) { toast('⚠️ Select a field and describe the correction.','warn'); return; }
   const h = volStopsData.find(x => x.id===suggestHid);
-  const labels = {address:'Address',size:'Household Size',phone:'Phone Number',notes:'Delivery Notes',health:'Health Info',other:'Other'};
-  const vals   = {address:h.address,size:String(h.size),phone:h.phone,notes:h.notes,health:h.health,other:''};
+  const labels = {address:'Address',size:'Household Size',phone:'Phone Number',notes:'Delivery Notes',dietary:'Dietary Restrictions',other:'Other'};
+  const vals   = {address:h.address,size:String(h.size),phone:h.phone,notes:h.notes,dietary:h.dietary,other:''};
 
   if (!currentSessionToken) {
     toast('✏ Suggestion submitted — admin will review.','info');
@@ -3542,24 +3526,7 @@ function renderProfile() {
         </div>
 
         <div class="profile-section">
-          <div class="section-title">Health & Dietary</div>
-
-          <div class="field-row">
-            <div class="field-label">
-              Health / Accessibility
-              <button class="edit-btn" onclick="toggleFieldEdit('health')">✏ Edit</button>
-            </div>
-            <div class="field-val" id="fval-health" style="color:${h.health&&h.health!=='None'?'var(--text)':'var(--text-muted)'}">
-              ${h.health || 'None noted'}
-            </div>
-            <div class="field-edit-wrap" id="fedit-health">
-              <input class="field-edit-input" id="finput-health" value="${h.health||''}" placeholder="e.g. Mobility impairment, elderly, disability…">
-              <div class="field-edit-actions">
-                <button class="btn-save-field" onclick="saveField('health')">Save</button>
-                <button class="btn-cancel-field" onclick="toggleFieldEdit('health')">Cancel</button>
-              </div>
-            </div>
-          </div>
+          <div class="section-title">Dietary</div>
 
           <div class="field-row">
             <div class="field-label">
@@ -3666,14 +3633,14 @@ async function saveField(field) {
     }
   }
 
-  const columns = {address:'address', phone:'phone', deliveryWindow:'delivery_window', notes:'notes', health:'health', dietary:'dietary'};
+  const columns = {address:'address', phone:'phone', deliveryWindow:'delivery_window', notes:'notes', dietary:'dietary'};
   const column = columns[field] || field;
   const { error } = await sb.from('households').update({ [column]: val || null }).eq('id', h.dbId);
   if (error) { console.error(error); toast(`⚠️ Couldn't save: ${error.message}`); return; }
 
   h[field] = val;
   h.lastUpdated = today;
-  const labels = {address:'Address',phone:'Phone',deliveryWindow:'Delivery window',notes:'Delivery notes',health:'Health info',dietary:'Dietary restrictions'};
+  const labels = {address:'Address',phone:'Phone',deliveryWindow:'Delivery window',notes:'Delivery notes',dietary:'Dietary restrictions'};
   await logAudit('Field updated', `${h.name}: ${labels[field]||field} updated`);
   $(`fedit-${field}`).classList.remove('open');
   // Update displayed value
