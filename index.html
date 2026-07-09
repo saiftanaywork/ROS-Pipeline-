@@ -900,23 +900,7 @@ tr.row-archived td{opacity:.6}
       <div style="font-size:13px;font-weight:600;margin-bottom:14px" id="suggestHouseholdName"></div>
       <div class="form-group">
         <label class="form-label">What needs correcting?</label>
-        <select class="form-select" id="suggestField" onchange="updateCurrentVal()">
-          <option value="">Choose a field…</option>
-          <option value="address">Address</option>
-          <option value="size">Household size</option>
-          <option value="phone">Phone number</option>
-          <option value="notes">Delivery notes / gate code</option>
-          <option value="dietary">Dietary restrictions</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div class="form-group" id="currentValGroup" style="display:none">
-        <label class="form-label">Currently on record</label>
-        <div style="padding:8px 12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13px;color:var(--text-muted)" id="currentValDisplay"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Correct value / what you observed</label>
-        <textarea class="form-textarea" id="suggestValue" placeholder="Describe what you saw or what the correct value should be…"></textarea>
+        <textarea class="form-textarea" id="suggestValue" placeholder="e.g. Address is wrong, gate code changed, family moved, etc."></textarea>
       </div>
     </div>
     <div class="modal-footer">
@@ -3294,33 +3278,14 @@ let suggestHid = null;
 function openSuggest(hid) {
   suggestHid = hid;
   $('suggestHouseholdName').textContent = volStopsData.find(h => h.id===hid).name;
-  $('suggestField').value = '';
   $('suggestValue').value = '';
-  $('currentValGroup').style.display = 'none';
   openModal('suggest');
 }
 
-function updateCurrentVal() {
-  const f = $('suggestField').value;
-  const h = volStopsData.find(x => x.id===suggestHid);
-  if (!f || !h) { $('currentValGroup').style.display='none'; return; }
-  const map = {address:h.address, size:String(h.size), phone:h.phone, notes:h.notes||'(none)', dietary:h.dietary||'(none)', other:''};
-  const val = map[f];
-  if (val !== undefined && val !== '') {
-    $('currentValGroup').style.display = 'block';
-    $('currentValDisplay').textContent = val;
-  } else {
-    $('currentValGroup').style.display = 'none';
-  }
-}
-
 async function submitSuggestion() {
-  const f = $('suggestField').value;
   const v = $('suggestValue').value.trim();
-  if (!f || !v) { toast('⚠️ Select a field and describe the correction.','warn'); return; }
+  if (!v) { toast('⚠️ Describe what needs correcting.','warn'); return; }
   const h = volStopsData.find(x => x.id===suggestHid);
-  const labels = {address:'Address',size:'Household Size',phone:'Phone Number',notes:'Delivery Notes',dietary:'Dietary Restrictions',other:'Other'};
-  const vals   = {address:h.address,size:String(h.size),phone:h.phone,notes:h.notes,dietary:h.dietary,other:''};
 
   if (!currentSessionToken) {
     toast('✏ Suggestion submitted — admin will review.','info');
@@ -3331,9 +3296,9 @@ async function submitSuggestion() {
   const { error } = await sb.rpc('submit_suggested_edit', {
     p_token: currentSessionToken,
     p_household_id: h.id,
-    p_field: f,
-    p_field_label: labels[f],
-    p_current_value: vals[f] || '—',
+    p_field: 'other',
+    p_field_label: 'Other',
+    p_current_value: '—',
     p_suggested_value: v,
     p_note: '',
     p_submitted_by: volName || 'Volunteer',
