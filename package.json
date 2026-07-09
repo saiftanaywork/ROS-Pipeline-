@@ -1,0 +1,23 @@
+{
+  "name": "ros-pipeline",
+  "version": "1.0.0",
+  "description": "DFW ROS - Delivery Management System",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server -p 3000",
+    "build": "echo 'Static site - no build needed'",
+    "lint": "echo 'No linter configured'",
+    "test": "echo 'No tests configured'"
+  },
+  "keywords": [
+    "ros",
+    "delivery",
+    "management"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/speed-insights": "^1.0.14"
+  },
+  "devDependencies": {}
+}
