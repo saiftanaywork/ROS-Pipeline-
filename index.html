@@ -663,6 +663,12 @@ tr.row-archived td{opacity:.6}
       <div class="page-hd">
         <div><div class="page-title">Pending Reviews</div><div class="page-sub">Volunteer-suggested corrections — approve to apply, reject to dismiss</div></div>
       </div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-pendingfilter="all" onclick="setPendingFilter('all',this)">All</button>
+        <button class="f-btn" data-pendingfilter="high" onclick="setPendingFilter('high',this)">🔴 High Priority</button>
+        <button class="f-btn" data-pendingfilter="checkin" onclick="setPendingFilter('checkin',this)">✅ From Check-Ins</button>
+        <button class="f-btn" data-pendingfilter="volunteer" onclick="setPendingFilter('volunteer',this)">👥 From Volunteers</button>
+      </div>
       <div id="editCardContainer"></div>
     </div>
 
@@ -1935,12 +1941,28 @@ async function submitBulkImport() {
 // ════════════════════════════════════════════
 //  PENDING REVIEWS
 // ════════════════════════════════════════════
+let pendingFilter = 'all';
+function setPendingFilter(f, btn) {
+  pendingFilter = f;
+  document.querySelectorAll('[data-pendingfilter]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderPendingList();
+}
+
 async function renderPending() {
   $('editCardContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
   await loadSuggestedEdits();
-  const pending = suggestedEdits.filter(e => e.status==='pending');
+  renderPendingList();
+}
+
+function renderPendingList() {
+  let pending = suggestedEdits.filter(e => e.status==='pending');
+  if (pendingFilter === 'high') pending = pending.filter(e => e.priority === 'high');
+  else if (pendingFilter === 'checkin') pending = pending.filter(e => e.submittedBy === 'Monthly Check-In');
+  else if (pendingFilter === 'volunteer') pending = pending.filter(e => e.submittedBy !== 'Monthly Check-In');
+
   if (!pending.length) {
-    $('editCardContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div style="color:var(--text-muted);font-size:13px">No pending suggestions right now.</div></div>`;
+    $('editCardContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div style="color:var(--text-muted);font-size:13px">No pending suggestions${pendingFilter!=='all'?' in this filter':' right now'}.</div></div>`;
     return;
   }
   $('editCardContainer').innerHTML = pending.map(e => `
@@ -3268,6 +3290,15 @@ async function markDelivered(id) {
   if (currentSessionToken) {
     const { error } = await sb.rpc('mark_stop_delivered', { p_token: currentSessionToken, p_household_id: id });
     if (error) console.error('Failed to record delivery:', error);
+  } else if (currentUser) {
+    // Preview mode ("Switch to Volunteer View", no real session token) — the
+    // logged-in admin can write directly instead of going through the anon RPC.
+    const h = volStopsData.find(x => x.id === id);
+    if (h) {
+      const { error } = await sb.from('households').update({ times_served: (h.timesServed||0) + 1 }).eq('id', h.dbId);
+      if (error) console.error('Failed to record delivery:', error);
+      else await logAudit('Delivery confirmed', `${h.name} marked delivered (preview)`);
+    }
   }
   toast('✓ Delivery recorded.');
 }
@@ -3289,24 +3320,34 @@ async function submitSuggestion() {
   const v = $('suggestValue').value.trim();
   if (!v) { toast('⚠️ Describe what needs correcting.','warn'); return; }
   const h = volStopsData.find(x => x.id===suggestHid);
+  if (!h) { toast('⚠️ Could not find this household.','warn'); return; }
+  const submittedBy = volName || (currentUser ? `${currentUser.name} (Preview)` : 'Volunteer');
 
-  if (!currentSessionToken) {
-    toast('✏ Suggestion submitted — admin will review.','info');
-    closeModal('suggest');
+  if (currentSessionToken) {
+    const { error } = await sb.rpc('submit_suggested_edit', {
+      p_token: currentSessionToken,
+      p_household_id: h.id,
+      p_field: 'other',
+      p_field_label: 'Other',
+      p_current_value: '—',
+      p_suggested_value: v,
+      p_note: '',
+      p_submitted_by: submittedBy,
+    });
+    if (error) { console.error(error); toast(`⚠️ Couldn't submit suggestion: ${error.message}`); return; }
+  } else if (currentUser) {
+    // Preview mode ("Switch to Volunteer View", no real session token) — the
+    // logged-in admin can insert directly instead of going through the anon RPC.
+    const { error } = await sb.from('suggested_edits').insert({
+      household_id: h.dbId, field: 'other', field_label: 'Other',
+      current_value: '—', suggested_value: v, note: '',
+      submitted_by: submittedBy, status: 'pending', priority: 'normal',
+    });
+    if (error) { console.error(error); toast(`⚠️ Couldn't submit suggestion: ${error.message}`); return; }
+  } else {
+    toast('⚠️ This link has expired — suggestion was not saved.', 'warn');
     return;
   }
-
-  const { error } = await sb.rpc('submit_suggested_edit', {
-    p_token: currentSessionToken,
-    p_household_id: h.id,
-    p_field: 'other',
-    p_field_label: 'Other',
-    p_current_value: '—',
-    p_suggested_value: v,
-    p_note: '',
-    p_submitted_by: volName || 'Volunteer',
-  });
-  if (error) { console.error(error); toast(`⚠️ Couldn't submit suggestion: ${error.message}`); return; }
 
   closeModal('suggest');
   toast('✏ Suggestion submitted — admin will review.','info');
