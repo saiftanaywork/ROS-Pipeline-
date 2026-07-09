@@ -1336,24 +1336,17 @@ function sortWithinCluster(cluster, fromPoint) {
   return result;
 }
 
-// 3. Sequence clusters via nearest-neighbor starting from HQ — every route
-// begins at the depot and always heads to whatever's closest next, instead of
-// starting from an arbitrary cluster and criss-crossing the metro.
+// 3. Sequence clusters by distance from HQ, ascending — the route always
+// moves outward from the depot and ends at the farthest cluster, so it never
+// has to double back toward the starting point at the end. (A pure
+// nearest-neighbor walk can leave one far-away outlier for last, forcing a
+// long return trip — sorting by distance from HQ guarantees the last stop
+// really is the farthest, with every other stop leading up to it in order.)
 function sequenceClusters(clusters) {
   if (clusters.length <= 1) return clusters;
-  const sorted = [];
-  let remaining = clusters.map((c, i) => ({idx: i, c}));
-  let curPoint = HQ_LOCATION;
-
-  while (remaining.length) {
-    const nearest = remaining.reduce((a, b) =>
-      dist(curPoint, centroid(a.c)) < dist(curPoint, centroid(b.c)) ? a : b
-    );
-    sorted.push(nearest.c);
-    curPoint = centroid(nearest.c);
-    remaining = remaining.filter(x => x !== nearest);
-  }
-  return sorted;
+  return [...clusters].sort((a, b) =>
+    dist(HQ_LOCATION, centroid(a)) - dist(HQ_LOCATION, centroid(b))
+  );
 }
 
 // ════════════════════════════════════════════
