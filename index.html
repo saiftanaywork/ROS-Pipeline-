@@ -496,6 +496,78 @@ tr.row-archived td{opacity:.6}
   </div>
 </div>
 
+<!-- ══ MONTHLY CHECK-IN FORM ══ -->
+<div class="login-screen" id="checkinScreen" style="display:none">
+  <div class="login-card" style="max-width:560px">
+    <div class="login-logo">
+      <div class="login-logo-icon">🌿</div>
+      <div>
+        <div class="login-logo-name">DFW ROS</div>
+        <div class="login-logo-sub">Delivery Management</div>
+      </div>
+    </div>
+
+    <div id="checkinFormWrap">
+      <div class="login-title">Monthly Check-In</div>
+      <div class="login-sub" id="checkinIntro">A few quick questions so we can keep your delivery info up to date.</div>
+
+      <div class="login-error" id="checkinError"></div>
+
+      <div class="form-group">
+        <label class="form-label">Are you still living at the address we have on file?</label>
+        <select class="form-select" id="checkinAddress" onchange="document.getElementById('checkinAddressWrap').style.display = this.value==='no' ? '' : 'none'">
+          <option value="yes">Yes, still there</option>
+          <option value="no">No, we've moved</option>
+        </select>
+        <div id="checkinAddressWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewAddress" placeholder="New address"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Is your household size still the same?</label>
+        <select class="form-select" id="checkinSize" onchange="document.getElementById('checkinSizeWrap').style.display = this.value==='no' ? '' : 'none'">
+          <option value="yes">Yes, same as before</option>
+          <option value="no">No, it's changed</option>
+        </select>
+        <div id="checkinSizeWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewSize" type="number" min="1" max="20" placeholder="New total number of people"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Any changes to dietary needs or restrictions?</label>
+        <select class="form-select" id="checkinDietary" onchange="document.getElementById('checkinDietaryWrap').style.display = this.value==='yes' ? '' : 'none'">
+          <option value="no">No changes</option>
+          <option value="yes">Yes, something's changed</option>
+        </select>
+        <div id="checkinDietaryWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewDietary" placeholder="Describe the change"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Any changes to health or accessibility needs?</label>
+        <select class="form-select" id="checkinHealth" onchange="document.getElementById('checkinHealthWrap').style.display = this.value==='yes' ? '' : 'none'">
+          <option value="no">No changes</option>
+          <option value="yes">Yes, something's changed</option>
+        </select>
+        <div id="checkinHealthWrap" style="display:none;margin-top:8px"><input class="form-input" id="checkinNewHealth" placeholder="Describe the change"></div>
+      </div>
+
+      <div class="form-group"><label class="form-label">Anything else we should know?</label><textarea class="form-textarea" id="checkinNotes" placeholder="Optional"></textarea></div>
+
+      <button class="login-btn" id="checkinBtn" onclick="submitCheckinResponse()">Submit →</button>
+    </div>
+
+    <div id="checkinSuccessWrap" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:44px;margin-bottom:12px">✅</div>
+      <div class="login-title">Thank You!</div>
+      <div class="login-sub">Your answers have been recorded. If anything changed, a coordinator will follow up.</div>
+    </div>
+
+    <div id="checkinAlreadyDoneWrap" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:44px;margin-bottom:12px">👍</div>
+      <div class="login-title">Already Submitted</div>
+      <div class="login-sub">This check-in has already been completed — thank you!</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ ADMIN SHELL ══ -->
 <div class="admin-shell" id="adminShell">
   <nav class="sidebar">
@@ -522,6 +594,10 @@ tr.row-archived td{opacity:.6}
         <span class="nav-badge" id="pendingBadge">3</span>
       </button>
       <button class="nav-item" onclick="showTab('session')"><span>📦</span> Session Builder</button>
+      <button class="nav-item" onclick="showTab('checkins')" id="nav-checkins">
+        <span>✅</span> Check-Ins
+        <span class="nav-badge" id="checkinsBadge" style="display:none">0</span>
+      </button>
       <button class="nav-item" onclick="showTab('volunteers')"><span>👥</span> Volunteers</button>
       <button class="nav-item" onclick="showTab('audit')"><span>📋</span> Audit Log</button>
     </div>
@@ -656,6 +732,30 @@ tr.row-archived td{opacity:.6}
         <table>
           <thead><tr><th>Name</th><th>Phone</th><th>Zone</th><th>Deliveries</th><th>Last Active</th></tr></thead>
           <tbody id="volunteersTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── CHECK-INS ── -->
+    <div class="tab-pane" id="tab-checkins">
+      <div class="page-hd">
+        <div><div class="page-title">Check-Ins</div><div class="page-sub">Monthly "are you still with us?" form sent to every active household</div></div>
+        <button class="btn btn-primary" onclick="generateCheckinBatch()">✅ Generate This Month's Check-Ins</button>
+      </div>
+      <div class="session-tip" style="margin-bottom:16px">
+        💡 Generating creates a check-in link for every active household that doesn't already have one pending. Tap "Send via WhatsApp" to actually deliver it — nothing sends automatically. A household is <strong>Overdue</strong> if it's been 10+ days with no reply; that's your cue to follow up.
+      </div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-checkinfilter="all" onclick="setCheckinFilter('all',this)">All</button>
+        <button class="f-btn" data-checkinfilter="overdue" onclick="setCheckinFilter('overdue',this)">⚠️ Overdue</button>
+        <button class="f-btn" data-checkinfilter="pending" onclick="setCheckinFilter('pending',this)">⏳ Pending</button>
+        <button class="f-btn" data-checkinfilter="responded" onclick="setCheckinFilter('responded',this)">✓ Responded</button>
+        <button class="f-btn" data-checkinfilter="never" onclick="setCheckinFilter('never',this)">— Never Sent</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Family</th><th>Zone</th><th>Last Sent</th><th>Status</th><th></th></tr></thead>
+          <tbody id="checkinsTbody"></tbody>
         </table>
       </div>
     </div>
@@ -1171,7 +1271,9 @@ async function loadSuggestedEdits() {
     field: e.field, fieldLabel: e.field_label,
     currentValue: e.current_value, suggestedValue: e.suggested_value, note: e.note,
     submittedBy: e.submitted_by, submittedAt: fmtDateTime(e.created_at), status: e.status,
+    priority: e.priority || 'normal',
   }));
+  suggestedEdits.sort((a, b) => (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0));
 }
 
 async function renderVolunteersTab() {
@@ -1411,6 +1513,7 @@ function showTab(id) {
   if (id === 'pending')  renderPending();
   if (id === 'audit')    renderAudit();
   if (id === 'volunteers') renderVolunteersTab();
+  if (id === 'checkins') renderCheckinsTab();
 }
 
 // ════════════════════════════════════════════
@@ -1872,10 +1975,10 @@ async function renderPending() {
     return;
   }
   $('editCardContainer').innerHTML = pending.map(e => `
-    <div class="edit-card">
+    <div class="edit-card" style="${e.priority==='high'?'border-color:var(--danger)':''}">
       <div class="edit-card-hd">
         <div>
-          <div class="edit-card-name">${e.householdName} <span class="badge b-pending" style="vertical-align:middle">${e.fieldLabel}</span></div>
+          <div class="edit-card-name">${e.householdName} <span class="badge b-pending" style="vertical-align:middle">${e.fieldLabel}</span> ${e.priority==='high'?'<span class="badge" style="vertical-align:middle;background:var(--danger-bg);color:var(--danger)" title="Reported directly by the household via their monthly check-in">🔴 High Priority</span>':''}</div>
           <div class="edit-card-meta">Submitted by ${e.submittedBy} · ${e.submittedAt}</div>
         </div>
       </div>
@@ -2164,6 +2267,215 @@ async function submitApplication() {
     : "Thank you — a coordinator will review your request and reach out soon.";
   $('applyFormWrap').style.display = 'none';
   $('applySuccessWrap').style.display = 'block';
+}
+
+// ════════════════════════════════════════════
+//  MONTHLY CHECK-IN (public form, no login required)
+// ════════════════════════════════════════════
+let currentCheckinToken = null;
+
+async function loadCheckinScreen(token) {
+  currentCheckinToken = token;
+  const { data, error } = await sb.rpc('get_checkin_request', { p_token: token });
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (error || !row) {
+    console.error(error);
+    $('checkinFormWrap').style.display = 'none';
+    $('checkinError').textContent = "This check-in link isn't valid or has expired.";
+    $('checkinError').classList.add('show');
+    return;
+  }
+
+  if (row.status === 'responded') {
+    $('checkinFormWrap').style.display = 'none';
+    $('checkinAlreadyDoneWrap').style.display = 'block';
+    return;
+  }
+
+  $('checkinIntro').textContent = `Hi ${row.household_name} — a few quick questions so we can keep your delivery info up to date. On file: ${row.household_address}.`;
+}
+
+async function submitCheckinResponse() {
+  if (!currentCheckinToken) return;
+  const errEl = $('checkinError');
+  errEl.classList.remove('show');
+
+  const addrChanged = $('checkinAddress').value === 'no';
+  const newAddress = addrChanged ? $('checkinNewAddress').value.trim() : null;
+  if (addrChanged && !newAddress) {
+    errEl.textContent = 'Please enter your new address.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  const sizeChanged = $('checkinSize').value === 'no';
+  const newSize = sizeChanged ? parseInt($('checkinNewSize').value) : null;
+  if (sizeChanged && !newSize) {
+    errEl.textContent = 'Please enter your new household size.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  const btn = $('checkinBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  const { error } = await sb.rpc('submit_checkin_response', {
+    p_token: currentCheckinToken,
+    p_still_same_address: $('checkinAddress').value,
+    p_new_address: newAddress,
+    p_still_same_size: $('checkinSize').value,
+    p_new_size: newSize,
+    p_dietary_changed: $('checkinDietary').value,
+    p_new_dietary: $('checkinDietary').value === 'yes' ? ($('checkinNewDietary').value.trim() || null) : null,
+    p_health_changed: $('checkinHealth').value,
+    p_new_health: $('checkinHealth').value === 'yes' ? ($('checkinNewHealth').value.trim() || null) : null,
+    p_notes: $('checkinNotes').value.trim() || null,
+  });
+
+  if (error) {
+    console.error(error);
+    errEl.textContent = `Something went wrong: ${error.message}`;
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Submit →';
+    return;
+  }
+
+  $('checkinFormWrap').style.display = 'none';
+  $('checkinSuccessWrap').style.display = 'block';
+}
+
+// ── Admin side ──
+const CHECKIN_OVERDUE_DAYS = 10;
+let checkinsCache = []; // one row per active household: {household, request|null}
+let checkinFilter = 'all';
+
+function setCheckinFilter(f, btn) {
+  checkinFilter = f;
+  document.querySelectorAll('[data-checkinfilter]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderCheckinsList();
+}
+
+function checkinStatusOf(request) {
+  if (!request) return 'never';
+  if (request.status === 'responded') return 'responded';
+  const daysSinceSent = Math.floor((Date.now() - new Date(request.sent_at)) / 86400000);
+  return daysSinceSent >= CHECKIN_OVERDUE_DAYS ? 'overdue' : 'pending';
+}
+
+async function renderCheckinsTab() {
+  $('checkinsTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>`;
+
+  const { data, error } = await sb
+    .from('checkin_requests')
+    .select('id, household_id, token, status, sent_at')
+    .order('sent_at', { ascending: false });
+  if (error) { console.error('Failed to load check-ins:', error); }
+
+  // Keep only the most recent request per household
+  const latestByHousehold = {};
+  (data || []).forEach(r => {
+    if (!latestByHousehold[r.household_id]) latestByHousehold[r.household_id] = r;
+  });
+
+  checkinsCache = households
+    .filter(h => h.status === 'active')
+    .map(h => ({ household: h, request: latestByHousehold[h.dbId] || null }));
+
+  const overdueCount = checkinsCache.filter(c => checkinStatusOf(c.request) === 'overdue').length;
+  const badge = $('checkinsBadge');
+  badge.textContent = overdueCount;
+  badge.style.display = overdueCount ? '' : 'none';
+
+  renderCheckinsList();
+}
+
+function renderCheckinsList() {
+  const rows = checkinFilter === 'all' ? checkinsCache : checkinsCache.filter(c => checkinStatusOf(c.request) === checkinFilter);
+  if (!rows.length) {
+    $('checkinsTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">No households match this filter.</td></tr>`;
+    return;
+  }
+
+  const statusBadgeHtml = status => ({
+    never:     '<span class="chip">Never sent</span>',
+    pending:   '<span class="badge b-pending">⏳ Pending</span>',
+    responded: '<span class="badge b-active">✓ Responded</span>',
+    overdue:   '<span class="badge b-stale" title="10+ days with no reply — worth a follow-up">⚠ Overdue</span>',
+  })[status];
+
+  $('checkinsTbody').innerHTML = rows.map(({household: h, request}) => {
+    const status = checkinStatusOf(request);
+    return `
+      <tr>
+        <td class="td-name">${h.name}</td>
+        <td><span class="chip">${h.zone}</span></td>
+        <td style="font-size:12px;color:var(--text-muted)">${request ? fmt(request.sent_at.slice(0,10)) : '—'}</td>
+        <td>${statusBadgeHtml(status)}</td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="stop-edit-btn" onclick="sendCheckinWhatsApp('${h.dbId}')">${request && status!=='responded' ? 'Resend' : 'Send'} via WhatsApp</button>
+            ${request ? `<button class="copy-link-btn" onclick="copyLink('${checkinUrl(request.token)}')">📋 Copy Link</button>` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function checkinUrl(token) {
+  const base = window.location.href.split('?')[0];
+  return `${base}?checkin=${token}`;
+}
+
+async function generateCheckinBatch() {
+  const active = households.filter(h => h.status === 'active');
+  const withoutPending = active.filter(h => {
+    const entry = checkinsCache.find(c => c.household.id === h.id);
+    return !entry || !entry.request || entry.request.status === 'responded';
+  });
+
+  if (!withoutPending.length) {
+    toast('Every active household already has a pending check-in.', 'info');
+    return;
+  }
+
+  const expiresAt = new Date(Date.now() + 45*86400000).toISOString();
+  const records = withoutPending.map(h => ({
+    household_id: h.dbId,
+    token: crypto.randomUUID().replace(/-/g, ''),
+    expires_at: expiresAt,
+  }));
+
+  const { error } = await sb.from('checkin_requests').insert(records);
+  if (error) { console.error(error); toast(`⚠️ Couldn't generate check-ins: ${error.message}`); return; }
+
+  await logAudit('Check-ins generated', `${records.length} household${records.length!==1?'s':''}`);
+  await renderCheckinsTab();
+  toast(`✅ ${records.length} check-in link${records.length!==1?'s':''} generated.`);
+}
+
+async function sendCheckinWhatsApp(householdDbId) {
+  const entry = checkinsCache.find(c => c.household.dbId === householdDbId);
+  if (!entry) return;
+  let request = entry.request;
+
+  if (!request || request.status === 'responded') {
+    const expiresAt = new Date(Date.now() + 45*86400000).toISOString();
+    const token = crypto.randomUUID().replace(/-/g, '');
+    const { error } = await sb.from('checkin_requests').insert({ household_id: householdDbId, token, expires_at: expiresAt });
+    if (error) { console.error(error); toast(`⚠️ Couldn't create check-in link: ${error.message}`); return; }
+    await renderCheckinsTab();
+    request = { token };
+  }
+
+  const url = checkinUrl(request.token);
+  const phone = entry.household.phone ? entry.household.phone.replace(/\D/g,'') : '';
+  const msg = encodeURIComponent(`Salaam! This is DFW ROS checking in. Could you take 30 seconds to answer a few quick questions so we can keep your delivery info up to date?\n${url}`);
+  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 
 // ════════════════════════════════════════════
@@ -2868,7 +3180,7 @@ async function enterAdmin() {
 
   $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
   await loadHouseholdsFromSupabase();
-  await Promise.all([loadSuggestedEdits(), loadVolunteers(), loadZonesCache()]);
+  await Promise.all([loadSuggestedEdits(), loadVolunteers(), loadZonesCache(), renderCheckinsTab()]);
   refreshApplicationsBadge();
 
   renderAll();
@@ -3419,6 +3731,11 @@ if (_volParams.get('session')) {
   $('adminShell').style.display  = 'none';
   $('applyScreen').style.display = 'flex';
   loadZonesCache();
+} else if (_volParams.get('checkin')) {
+  $('loginScreen').style.display = 'none';
+  $('adminShell').style.display  = 'none';
+  $('checkinScreen').style.display = 'flex';
+  loadCheckinScreen(_volParams.get('checkin'));
 } else {
   // Check for an existing Supabase session (survives refresh, not just this tab)
   $('adminShell').style.display = 'none';
