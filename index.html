@@ -463,12 +463,22 @@ tr.row-archived td{opacity:.6}
         <div class="form-group"><label class="form-label">Dietary Restrictions</label><input class="form-input" id="applyDietary" placeholder="e.g. Halal only, no pork…"></div>
         <div class="form-group"><label class="form-label">Allergies</label><input class="form-input" id="applyAllergies" placeholder="e.g. Peanuts, shellfish…"></div>
       </div>
-      <div class="form-group"><label class="form-label">Preferred Language</label><input class="form-input" id="applyLanguage" placeholder="e.g. English, Arabic, Urdu, Spanish…"></div>
-
-      <div class="section-title">Emergency Contact <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-light)">(optional)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="applyEmergName" placeholder="Contact name"></div>
-        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="applyEmergPhone" placeholder="214-555-0000"></div>
+      <div class="form-group">
+        <label class="form-label">Preferred Language</label>
+        <select class="form-select" id="applyLanguage" onchange="document.getElementById('applyLanguageOtherWrap').style.display = this.value==='Other' ? '' : 'none'">
+          <option value="">Select…</option>
+          <option>English</option>
+          <option>Spanish</option>
+          <option>Arabic</option>
+          <option>Urdu</option>
+          <option>Farsi / Persian</option>
+          <option>Somali</option>
+          <option>Bengali</option>
+          <option>Turkish</option>
+          <option>French</option>
+          <option value="Other">Other</option>
+        </select>
+        <div id="applyLanguageOtherWrap" style="display:none;margin-top:8px"><input class="form-input" id="applyLanguageOther" placeholder="Please specify"></div>
       </div>
 
       <button class="login-btn" id="applyBtn" onclick="submitApplication()">Submit Application →</button>
@@ -855,7 +865,7 @@ tr.row-archived td{opacity:.6}
     <div class="modal-body">
       <div id="bulkImportUploadStep">
         <div class="info-box">
-          Download the template, fill in one row per household (same fields as "Add Single Household"), then drop the file back in below. <strong>Name</strong>, <strong>Address</strong>, and <strong>Household Size</strong> are required; <strong>Zone</strong> must match one of the existing zone names exactly.
+          Download the template, fill in one row per household (same fields as "Add Single Household"), then drop the file back in below. <strong>Name, Address, Household Size, Zone, and Phone</strong> are required — rows missing any of those, or duplicating an existing address, will be flagged and skipped. Health, Dietary, and Delivery Notes are optional; missing ones just get a heads-up before import. <strong>Zone</strong> must match one of the existing zone names exactly.
         </div>
         <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="downloadImportTemplate()">⬇ Download CSV Template</button>
         <div class="dropzone" id="importDropzone" onclick="document.getElementById('importFileInput').click()">
@@ -918,6 +928,17 @@ tr.row-archived td{opacity:.6}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('editVolunteer')">Cancel</button>
       <button class="btn btn-primary" onclick="saveVolunteerEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic alert/notice popup, reused for duplicate warnings, import notices, etc. -->
+<div class="modal-backdrop" id="modal-alert">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="alertModalTitle">Notice</div><button class="modal-close" onclick="closeModal('alert')">×</button></div>
+    <div class="modal-body" id="alertModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('alert')">OK</button>
     </div>
   </div>
 </div>
@@ -1018,6 +1039,24 @@ function daysSince(dateStr) {
 }
 function isStale(h) { return daysSince(h.lastUpdated) >= 25 && h.status === 'active'; }
 function packsFor(size) { return Math.max(1, Math.ceil(size / 2)); }
+
+function showAlertModal(title, bodyHtml) {
+  $('alertModalTitle').textContent = title;
+  $('alertModalBody').innerHTML = bodyHtml;
+  openModal('alert');
+}
+
+// Duplicate-address detection: exact match after trimming/collapsing whitespace
+// and lowercasing — deliberately NOT fuzzy, so "123 Main St Apt 2" and
+// "123 Main St Apt 4" are correctly treated as different households.
+function normalizeAddress(addr) {
+  return (addr || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function findDuplicateAddress(address, excludeHouseholdId) {
+  const norm = normalizeAddress(address);
+  if (!norm) return null;
+  return households.find(h => h.id !== excludeHouseholdId && normalizeAddress(h.address) === norm) || null;
+}
 
 // ════════════════════════════════════════════
 //  SUPABASE DATA LOADING (reads)
@@ -1569,6 +1608,12 @@ async function addHousehold() {
   const addr = $('newAddress').value.trim();
   if (!name || !addr) { toast('⚠️ Name and address are required.','warn'); return; }
 
+  const dup = findDuplicateAddress(addr, null);
+  if (dup) {
+    showAlertModal('⚠️ Possible Duplicate', `<p>This address already belongs to <strong>${dup.name}</strong> on record. A household wasn't added.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included in the address so it doesn't match.</p>`);
+    return;
+  }
+
   if (!zonesCache.length) await loadZonesCache();
   const zoneName = $('newZone').value;
   const zone = zonesCache.find(z => z.name === zoneName);
@@ -1672,18 +1717,25 @@ async function handleImportFile(file) {
 
   if (!zonesCache.length) await loadZonesCache();
 
-  bulkImportRows = rows.slice(1).map(r => {
-    const get = i => (i === -1 || i >= r.length) ? '' : r[i].trim();
+  const seenAddresses = new Map(); // normalized address → row # already claimed within this file
+  bulkImportRows = rows.slice(1).map((r, i) => {
+    const get = j => (j === -1 || j >= r.length) ? '' : r[j].trim();
     const name = get(idx.name);
     const address = get(idx.address);
     const zoneName = get(idx.zone);
+    const phone = get(idx.phone);
     const sizeRaw = get(idx.size);
     const size = parseInt(sizeRaw) || 0;
+    const health = get(idx.health);
+    const dietary = get(idx.dietary);
+    const notes = get(idx.notes);
 
+    // Required fields: name, address, household size, zone, phone (contact info)
     const errors = [];
     if (!name) errors.push('Missing name');
     if (!address) errors.push('Missing address');
     if (!size || size < 1) errors.push('Household size must be a number ≥ 1');
+    if (!phone) errors.push('Missing phone (contact info)');
     let zone = null;
     if (zoneName) {
       zone = zonesCache.find(z => z.name.toLowerCase() === zoneName.toLowerCase());
@@ -1692,18 +1744,40 @@ async function handleImportFile(file) {
       errors.push('Missing zone');
     }
 
+    // Duplicate check: exact address match (unit numbers matter — "Apt 2" vs "Apt 4"
+    // are different households) against both the existing database and earlier
+    // rows already parsed from this same file.
+    const norm = normalizeAddress(address);
+    if (norm) {
+      const existingDup = findDuplicateAddress(address, null);
+      if (existingDup) errors.push(`Duplicate of existing household "${existingDup.name}"`);
+      else if (seenAddresses.has(norm)) errors.push(`Duplicate of row ${seenAddresses.get(norm)} in this file`);
+      else seenAddresses.set(norm, i + 1);
+    }
+
+    // Optional/lesser fields — missing is fine, but we'll flag it in a summary notice
+    const warnings = [];
+    if (!health) warnings.push('health');
+    if (!dietary) warnings.push('dietary');
+    if (!notes) warnings.push('delivery notes');
+
     return {
       name, address, zoneName, zone, size,
       adolescents: parseInt(get(idx.adolescents)) || 0,
-      health: get(idx.health) || null,
-      dietary: get(idx.dietary) || null,
-      phone: get(idx.phone) || null,
-      notes: get(idx.notes) || null,
-      errors,
+      health: health || null,
+      dietary: dietary || null,
+      phone: phone || null,
+      notes: notes || null,
+      errors, warnings,
     };
   });
 
   renderImportPreview();
+
+  const missingOptionalCount = bulkImportRows.filter(r => !r.errors.length && r.warnings.length).length;
+  if (missingOptionalCount) {
+    showAlertModal('ℹ️ Some Optional Info Is Missing', `<p>${missingOptionalCount} row${missingOptionalCount!==1?'s are':' is'} missing optional details like health notes, dietary restrictions, or delivery notes.</p><p style="margin-top:10px">That's fine — they'll still import. You (or a volunteer) can fill those in later from the household's profile.</p>`);
+  }
 }
 
 function renderImportPreview() {
@@ -2070,9 +2144,9 @@ async function submitApplication() {
     p_children: parseInt($('applyChildren').value) || 0,
     p_seniors: parseInt($('applySeniors').value) || 0,
     p_dietary_restrictions: $('applyDietary').value.trim() || null,
-    p_preferred_language: $('applyLanguage').value.trim() || null,
-    p_emergency_contact_name: $('applyEmergName').value.trim() || null,
-    p_emergency_contact_phone: $('applyEmergPhone').value.trim() || null,
+    p_preferred_language: ($('applyLanguage').value === 'Other' ? $('applyLanguageOther').value.trim() : $('applyLanguage').value) || null,
+    p_emergency_contact_name: null,
+    p_emergency_contact_phone: null,
   });
 
   if (error) {
@@ -3271,6 +3345,15 @@ async function saveField(field) {
   const input = $(`finput-${field}`);
   if (!input) return;
   const val = input.value.trim();
+
+  if (field === 'address') {
+    const dup = findDuplicateAddress(val, h.id);
+    if (dup) {
+      showAlertModal('⚠️ Possible Duplicate', `<p>That address already belongs to <strong>${dup.name}</strong> on record. The change wasn't saved.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included so it doesn't match.</p>`);
+      return;
+    }
+  }
+
   const columns = {address:'address', phone:'phone', deliveryWindow:'delivery_window', notes:'notes', health:'health', dietary:'dietary'};
   const column = columns[field] || field;
   const { error } = await sb.from('households').update({ [column]: val || null }).eq('id', h.dbId);
