@@ -2013,6 +2013,7 @@ async function confirmApprove() {
 
   const { error: statusErr } = await sb.from('suggested_edits').update({ status: 'approved' }).eq('id', e.id);
   if (statusErr) { console.error(statusErr); toast(`⚠️ Couldn't update suggestion: ${statusErr.message}`); return; }
+  e.status = 'approved'; // update local state now so the sidebar badge/stats reflect it immediately, not after the next fetch
 
   await logAudit('Suggested edit approved', `${e.householdName}: ${e.fieldLabel} updated`);
   closeModal('approve'); renderAll(); renderPending(); toast(`✓ Applied to ${e.householdName}.`);
@@ -2030,6 +2031,7 @@ async function confirmReject() {
 
   const { error } = await sb.from('suggested_edits').update({ status: 'rejected' }).eq('id', e.id);
   if (error) { console.error(error); toast(`⚠️ Couldn't reject: ${error.message}`); return; }
+  e.status = 'rejected'; // update local state now so the sidebar badge/stats reflect it immediately, not after the next fetch
 
   await logAudit('Suggested edit rejected', `${e.householdName}: ${e.fieldLabel} dismissed${reason ? ' — ' + reason : ''}`);
   closeModal('reject'); renderAll(); renderPending(); toast(`Suggestion rejected.`,'info');
