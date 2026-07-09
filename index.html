@@ -524,13 +524,16 @@ tr.row-archived td{opacity:.6}
       <div class="stats-grid" id="statsGrid"></div>
       <div class="filter-bar">
         <button class="f-btn on" data-filter="all" onclick="setFilter('all',this)">All</button>
-        <button class="f-btn" data-filter="active" onclick="setFilter('active',this)">🟢 Active</button>
-        <button class="f-btn" data-filter="inactive" onclick="setFilter('inactive',this)">⚫ Inactive</button>
-        <button class="f-btn" data-filter="stale" onclick="setFilter('stale',this)">⚠️ Stale</button>
+        <button class="f-btn" data-filter="active" onclick="setFilter('active',this)" title="Currently receiving deliveries.">🟢 Active</button>
+        <button class="f-btn" data-filter="inactive" onclick="setFilter('inactive',this)" title="No longer receiving deliveries — either graduated (a good outcome, like SNAP or a new job) or archived (an administrative issue, like a bad address). Their record is kept, not deleted.">⚫ Inactive</button>
+        <button class="f-btn" data-filter="stale" onclick="setFilter('stale',this)" title="Still active, but this record hasn't been touched in 25+ days — the address or notes may be out of date. Worth double-checking before the next delivery.">⚠️ Stale</button>
         <select class="search-box" id="zoneFilter" onchange="renderTable()" style="min-width:130px">
           <option value="">All Zones</option>
         </select>
         <input class="search-box ml-auto" type="text" placeholder="Search…" id="searchBox" oninput="renderTable()" style="max-width:200px">
+      </div>
+      <div class="session-tip" style="margin-bottom:16px">
+        💡 <strong>Inactive</strong> = no longer on delivery routes (graduated with a positive outcome, or archived for an administrative reason) — history is kept, nothing is deleted. <strong>Stale</strong> = still active, but not updated in 25+ days — the address or notes might be out of date.
       </div>
       <div class="tbl-wrap">
         <table>
@@ -596,10 +599,14 @@ tr.row-archived td{opacity:.6}
               <option value="">All Zones</option>
             </select>
           </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Max Clusters</div>
+            <input type="number" class="search-box" id="maxClusters" min="1" placeholder="Auto" style="width:90px">
+          </div>
           <button class="btn btn-primary" style="align-self:flex-end" onclick="runClustering()">⚡ Auto-Group Stops</button>
         </div>
         <div class="session-tip" style="margin-top:14px">
-          💡 The system groups households by how close they are on the map, then sequences the clusters for shortest overall drive. Families in the same apartment complex or street will always land in the same group.
+          💡 Households in the same city are grouped together (never split across clusters unless a group would exceed 6 stops), and every route is sequenced starting from HQ (6401 Independence Pkwy, Plano) outward — so volunteers never drive past a stop just to double back to it later. Set "Max Clusters" to force smaller groups to consolidate further.
         </div>
       </div>
 
@@ -608,7 +615,7 @@ tr.row-archived td{opacity:.6}
       <div id="linksSection" style="display:none">
         <div class="links-section">
           <div class="links-header">🔗 Volunteer Links</div>
-          <div class="links-sub">Send each link via WhatsApp. Volunteers tap it and see only their assigned stops — no login needed.</div>
+          <div class="links-sub">Send each link via WhatsApp. Volunteers tap it and see only their assigned stops — no login needed. Links expire after 24 hours so there's never confusion about which one is current.</div>
           <div id="linksContainer"></div>
         </div>
       </div>
@@ -631,7 +638,15 @@ tr.row-archived td{opacity:.6}
     <!-- ── AUDIT LOG ── -->
     <div class="tab-pane" id="tab-audit">
       <div class="page-hd">
-        <div><div class="page-title">Audit Log</div><div class="page-sub">Every change to household data, timestamped</div></div>
+        <div><div class="page-title">Audit Log</div><div class="page-sub">Every change made on the site, timestamped</div></div>
+      </div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-auditfilter="all" onclick="setAuditFilter('all',this)">All</button>
+        <button class="f-btn" data-auditfilter="households" onclick="setAuditFilter('households',this)">🏠 Households</button>
+        <button class="f-btn" data-auditfilter="applications" onclick="setAuditFilter('applications',this)">📥 Applications</button>
+        <button class="f-btn" data-auditfilter="suggestions" onclick="setAuditFilter('suggestions',this)">📝 Suggestions</button>
+        <button class="f-btn" data-auditfilter="volunteers" onclick="setAuditFilter('volunteers',this)">👥 Volunteers</button>
+        <button class="f-btn" data-auditfilter="sessions" onclick="setAuditFilter('sessions',this)">📦 Sessions & Deliveries</button>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px">
         <div id="auditContainer"></div>
@@ -834,6 +849,26 @@ tr.row-archived td{opacity:.6}
   </div>
 </div>
 
+<!-- Edit Volunteer -->
+<div class="modal-backdrop" id="modal-editVolunteer">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Edit Volunteer</div><button class="modal-close" onclick="closeModal('editVolunteer')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="editVolName" placeholder="e.g. Fatima Al-Sayed"></div>
+      <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="editVolPhone" placeholder="214-555-0000"></div>
+      <div class="form-group"><label class="form-label">Zone</label><select class="form-select" id="editVolZone"><option value="">Unassigned</option></select></div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="editVolActive"><option value="true">Active — shows up in autocomplete for new assignments</option><option value="false">Inactive — kept on record, hidden from assignment</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('editVolunteer')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveVolunteerEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -905,7 +940,7 @@ let activeThreshold = 0.012;
 const MAX_STOPS_PER_VOLUNTEER = 6; // a volunteer shouldn't be handed more stops than fit in one reasonable trip
 let sessionClusters = [];          // array of arrays of household objects
 let clusterAssignments = {};       // clusterIdx → volunteer name
-let generatedLinks = [];           // [{vol, stopIds, url}]
+let clusterLinks = {};             // clusterIdx → {token, url, vol, stops, expiresAt, isNew} — generated per-cluster
 let pendingEditId  = null;
 let pendingHouseholdId = null;
 let volStopsData   = [];           // households shown in volunteer view
@@ -989,14 +1024,14 @@ const REASON_LABELS = {snap:'SNAP',employment:'Employment',moved:'Moved','self-s
 function isPositiveReason(r) { return POSITIVE_REASONS.includes(r); }
 
 function statusBadge(h) {
-  const stale = isStale(h) ? '<span class="badge b-stale" style="margin-left:4px">Stale</span>' : '';
+  const stale = isStale(h) ? `<span class="badge b-stale" style="margin-left:4px" title="Not updated in ${daysSince(h.lastUpdated)}+ days — the address or notes might be out of date.">Stale</span>` : '';
   if (h.status === 'active') return `<span class="badge b-active">Active</span>${stale}`;
   if (h.status === 'inactive') {
     const lbl = REASON_LABELS[h.inactiveReason] || 'Inactive';
     if (isPositiveReason(h.inactiveReason)) {
-      return `<span class="badge b-graduated">Inactive · ${lbl}</span>`;
+      return `<span class="badge b-graduated" title="Graduated — a positive outcome, no longer needs deliveries. History is kept.">Inactive · ${lbl}</span>`;
     }
-    return `<span class="badge b-archived">Inactive · ${lbl}</span>`;
+    return `<span class="badge b-archived" title="Archived — an administrative reason (bad address, unresponsive, etc.), not a positive outcome. History is kept in case they need services again.">Inactive · ${lbl}</span>`;
   }
   return '';
 }
@@ -1028,7 +1063,7 @@ async function logAudit(action, detail) {
 }
 
 async function loadVolunteers() {
-  const { data, error } = await sb.from('volunteers').select('id, name, phone, active, zones ( name )').order('name');
+  const { data, error } = await sb.from('volunteers').select('id, name, phone, active, zone_id, zones ( name )').order('name');
   if (error) { console.error('Failed to load volunteers:', error); return; }
   volunteersCache = data || [];
   VOLUNTEER_NAMES = volunteersCache.filter(v => v.active).map(v => v.name);
@@ -1071,7 +1106,7 @@ async function renderVolunteersTab() {
     const st = statsByName[v.name] || { deliveries: 0, lastActive: null };
     return `
       <tr>
-        <td class="td-name">${v.name}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
+        <td class="td-name" style="cursor:pointer;color:var(--accent)" onclick="openVolunteerEdit('${v.id}')">${v.name}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
         <td>${v.phone || '—'}</td>
         <td>${v.zones ? `<span class="chip">${v.zones.name}</span>` : '—'}</td>
         <td>${st.deliveries}</td>
@@ -1100,9 +1135,49 @@ async function submitAddVolunteer() {
   toast(`👥 ${name} added to roster.`);
 }
 
+let editingVolunteerId = null;
+function openVolunteerEdit(id) {
+  const v = volunteersCache.find(x => x.id === id);
+  if (!v) return;
+  editingVolunteerId = id;
+  $('editVolName').value = v.name;
+  $('editVolPhone').value = v.phone || '';
+  $('editVolZone').value = v.zones ? v.zones.name : '';
+  $('editVolActive').value = String(v.active);
+  openModal('editVolunteer');
+}
+
+async function saveVolunteerEdit() {
+  const v = volunteersCache.find(x => x.id === editingVolunteerId);
+  if (!v) return;
+  const name = $('editVolName').value.trim();
+  if (!name) { toast('⚠️ Name is required.','warn'); return; }
+  const phone = $('editVolPhone').value.trim();
+  const zoneName = $('editVolZone').value;
+  const active = $('editVolActive').value === 'true';
+
+  if (!zonesCache.length) await loadZonesCache();
+  const zone = zonesCache.find(z => z.name === zoneName);
+
+  const { error } = await sb.from('volunteers').update({
+    name, phone: phone || null, zone_id: zone ? zone.id : null, active,
+  }).eq('id', v.id);
+  if (error) { console.error(error); toast(`⚠️ Couldn't save: ${error.message}`); return; }
+
+  await logAudit('Volunteer updated', `${v.name}${v.name!==name?' → '+name:''}`);
+  closeModal('editVolunteer');
+  await renderVolunteersTab();
+  toast(`✓ ${name} updated.`);
+}
+
 // ════════════════════════════════════════════
 //  CLUSTERING ALGORITHM
 // ════════════════════════════════════════════
+
+// Every route starts here: 6401 Independence Pkwy, Plano, TX 75023 (approximate —
+// this app has no geocoding API, so all coordinates including this one are
+// hand-placed estimates, consistent with how household/zone coordinates work).
+const HQ_LOCATION = { lat: 33.034, lng: -96.803 };
 
 // 1. Group by proximity (connected-components style):
 //    Any two houses within `threshold` degrees of each other are in the same cluster.
@@ -1135,11 +1210,70 @@ function clusterByProximity(houses, threshold) {
   return clusters;
 }
 
-// 2. Sort stops within each cluster (nearest-neighbor from first stop)
-function sortWithinCluster(cluster) {
+// Zone "signature" used to decide whether two clusters are safe to merge as
+// being effectively "the same city" — a joined, sorted list of the zones
+// present in the cluster (almost always just one, since zones are geographically
+// far apart relative to the clustering thresholds).
+function clusterZoneKey(cluster) {
+  return [...new Set(cluster.map(h => h.zone))].sort().join('|');
+}
+
+// 1b. Consolidate: merge same-zone clusters into each other (so households in the
+// same city don't end up needlessly split into separate small clusters), then, if
+// still above maxClusters, keep merging the nearest remaining pair of clusters
+// (regardless of zone). Never merges past MAX_STOPS_PER_VOLUNTEER stops.
+function consolidateClusters(clusters, maxClusters) {
+  let result = clusters.map(c => c.slice());
+
+  // Same-zone merges first — this is what actually fixes "same city, multiple clusters".
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        if (result[i].length + result[j].length > MAX_STOPS_PER_VOLUNTEER) continue;
+        if (clusterZoneKey(result[i]) !== clusterZoneKey(result[j])) continue;
+        result[i] = result[i].concat(result[j]);
+        result.splice(j, 1);
+        merged = true;
+        break outer;
+      }
+    }
+  }
+
+  // If a cap was set and we're still over it, keep merging the nearest legal pair
+  // (by centroid distance) regardless of zone, until at the cap or no legal merge remains.
+  if (maxClusters) {
+    while (result.length > maxClusters) {
+      let best = null, bestDist = Infinity;
+      for (let i = 0; i < result.length; i++) {
+        for (let j = i + 1; j < result.length; j++) {
+          if (result[i].length + result[j].length > MAX_STOPS_PER_VOLUNTEER) continue;
+          const d = dist(centroid(result[i]), centroid(result[j]));
+          if (d < bestDist) { bestDist = d; best = [i, j]; }
+        }
+      }
+      if (!best) break; // can't merge further without breaking the per-volunteer cap
+      const [i, j] = best;
+      result[i] = result[i].concat(result[j]);
+      result.splice(j, 1);
+    }
+  }
+
+  return result;
+}
+
+// 2. Sort stops within a cluster via nearest-neighbor, continuing on from
+// `fromPoint` (the point the route is arriving from — HQ for the first cluster,
+// or the previous cluster's last stop) so the route doesn't double back.
+function sortWithinCluster(cluster, fromPoint) {
   if (cluster.length <= 1) return cluster;
-  const result = [cluster[0]];
-  let remaining = cluster.slice(1);
+  let remaining = cluster.slice();
+  const start = fromPoint
+    ? remaining.reduce((a, b) => dist(fromPoint, a) < dist(fromPoint, b) ? a : b)
+    : remaining[0];
+  const result = [start];
+  remaining = remaining.filter(h => h.id !== start.id);
   while (remaining.length) {
     const cur = result[result.length - 1];
     const nearest = remaining.reduce((a, b) => dist(cur, a) < dist(cur, b) ? a : b);
@@ -1149,24 +1283,21 @@ function sortWithinCluster(cluster) {
   return result;
 }
 
-// 3. Sequence clusters by centroid proximity (nearest-neighbor)
+// 3. Sequence clusters via nearest-neighbor starting from HQ — every route
+// begins at the depot and always heads to whatever's closest next, instead of
+// starting from an arbitrary cluster and criss-crossing the metro.
 function sequenceClusters(clusters) {
   if (clusters.length <= 1) return clusters;
-  // Start from cluster with most stops
   const sorted = [];
   let remaining = clusters.map((c, i) => ({idx: i, c}));
-  let cur = remaining.reduce((a, b) => a.c.length >= b.c.length ? a : b);
-  sorted.push(cur.c);
-  remaining = remaining.filter(x => x !== cur);
-  let curC = cur.c;
+  let curPoint = HQ_LOCATION;
 
   while (remaining.length) {
-    const ctr = centroid(curC);
     const nearest = remaining.reduce((a, b) =>
-      dist(ctr, centroid(a.c)) < dist(ctr, centroid(b.c)) ? a : b
+      dist(curPoint, centroid(a.c)) < dist(curPoint, centroid(b.c)) ? a : b
     );
     sorted.push(nearest.c);
-    curC = nearest.c;
+    curPoint = centroid(nearest.c);
     remaining = remaining.filter(x => x !== nearest);
   }
   return sorted;
@@ -1529,7 +1660,7 @@ async function loadZonesCache() {
 // select's own first option (e.g. "All Zones" / "Unassigned") intact.
 function populateZoneSelects() {
   const options = zonesCache.map(z => `<option>${z.name}</option>`).join('');
-  ['zoneFilter', 'sessionZone', 'newZone', 'newVolZone', 'applyCity'].forEach(id => {
+  ['zoneFilter', 'sessionZone', 'newZone', 'newVolZone', 'editVolZone', 'applyCity'].forEach(id => {
     const el = $(id);
     if (!el) return;
     const firstOption = el.querySelector('option');
@@ -1729,20 +1860,54 @@ async function submitApplication() {
 // ════════════════════════════════════════════
 //  AUDIT LOG
 // ════════════════════════════════════════════
+const AUDIT_CATEGORIES = {
+  'New household added':      'households',
+  'Family graduated':         'households',
+  'Family archived':          'households',
+  'Household restored':       'households',
+  'Field updated':            'households',
+  'Visit note added':         'households',
+  'Application approved':     'applications',
+  'Application rejected':     'applications',
+  'Suggested edit approved':  'suggestions',
+  'Suggested edit rejected':  'suggestions',
+  'Suggested edit submitted': 'suggestions',
+  'Volunteer added':          'volunteers',
+  'Volunteer added to roster':'volunteers',
+  'Volunteer updated':        'volunteers',
+  'Delivery link created':    'sessions',
+  'Delivery session created': 'sessions',
+  'Delivery confirmed':       'sessions',
+};
+function auditCategory(action) { return AUDIT_CATEGORIES[action] || 'households'; }
+
+let auditFilter = 'all';
+function setAuditFilter(f, btn) {
+  auditFilter = f;
+  document.querySelectorAll('[data-auditfilter]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderAuditList();
+}
+
 async function renderAudit() {
   $('auditContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
-  const { data, error } = await sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(100);
+  const { data, error } = await sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(200);
   if (error) {
     console.error(error);
     $('auditContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Couldn't load audit log</div><div style="color:var(--text-muted);font-size:13px">${error.message}</div></div>`;
     return;
   }
   auditLog = data || [];
-  if (!auditLog.length) {
-    $('auditContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No activity yet</div></div>`;
+  renderAuditList();
+}
+
+function renderAuditList() {
+  const rows = auditFilter === 'all' ? auditLog : auditLog.filter(a => auditCategory(a.action) === auditFilter);
+  if (!rows.length) {
+    $('auditContainer').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No activity${auditFilter==='all'?' yet':' in this category'}</div></div>`;
     return;
   }
-  $('auditContainer').innerHTML = auditLog.map(a => `
+  $('auditContainer').innerHTML = rows.map(a => `
     <div class="audit-item">
       <div class="audit-dot"></div>
       <div>
@@ -1775,12 +1940,23 @@ function runClustering() {
     return;
   }
 
+  const maxClusters = parseInt($('maxClusters').value) || null;
+
   const raw = clusterByProximity(pool, activeThreshold);
-  const sequenced = sequenceClusters(raw);
-  const sorted = sequenced.map(c => sortWithinCluster(c));
-  sessionClusters = capClusters(sorted);
+  const consolidated = capClusters(consolidateClusters(raw, maxClusters));
+  const sequenced = sequenceClusters(consolidated);
+
+  // Order stops within each cluster continuing the route direction from HQ,
+  // then from wherever the previous cluster left off — no backtracking.
+  let cursor = HQ_LOCATION;
+  sessionClusters = sequenced.map(c => {
+    const ordered = sortWithinCluster(c, cursor);
+    cursor = ordered[ordered.length - 1];
+    return ordered;
+  });
+
   clusterAssignments = {};
-  generatedLinks = [];
+  clusterLinks = {};
   skippedStops = [];
   skipFormOpen = null;
   $('linksSection').style.display = 'none';
@@ -1815,7 +1991,10 @@ function getUnassignedHouseholds() {
 }
 
 function invalidateLinks() {
-  generatedLinks = [];
+  // Any structural edit can shift cluster indices, so we can't safely keep
+  // partial per-cluster links around — clear them all; unaffected clusters
+  // can just be regenerated with one click.
+  clusterLinks = {};
   $('linksSection').style.display = 'none';
 }
 
@@ -1943,7 +2122,7 @@ function renderClusterCards() {
       <div style="width:1px;background:var(--border);align-self:stretch"></div>
       <div><div class="ssv" style="color:var(--warn)">${skippedStops.length}</div><div class="ssl">Skipped</div></div>
       <div style="margin-left:auto">
-        <button class="btn btn-primary" onclick="generateLinks()">🔗 Generate Volunteer Links</button>
+        <button class="btn btn-primary" onclick="generateRemainingLinks()" title="Generates a link for every assigned cluster that doesn't have one yet">🔗 Generate Remaining Links</button>
       </div>
     </div>
   `;
@@ -2100,8 +2279,10 @@ function renderClusterCards() {
               oninput="onAssignInput(${idx},this)">
             <datalist id="roster-${idx}">${VOLUNTEER_NAMES.map(v=>`<option value="${v}">`).join('')}</datalist>
             ${assigned?`<span class="assigned-tag">✓ ${assigned.split(' ')[0]}</span>`:''}
+            <button class="btn btn-sm btn-primary" onclick="generateClusterLink(${idx})">${clusterLinks[idx]?'🔄 Regenerate Link':'🔗 Generate Link'}</button>
           </div>
           ${assigned && !VOLUNTEER_NAMES.includes(assigned)?`<div style="font-size:11px;color:var(--st-stale)">⚠ Not in roster — link still works.</div>`:''}
+          ${clusterLinks[idx] ? `<div style="width:100%">${linkRowHtml(clusterLinks[idx], idx)}</div>` : ''}
         </div>
       </div>
     `;
@@ -2118,88 +2299,110 @@ function onAssignInput(idx, el) {
   el.className = 'vol-input' + (el.value.trim() ? ' has-val' : '');
 }
 
-async function generateLinks() {
-  // Sync any assignments not yet captured by oninput
+const LINK_EXPIRY_MS = 24 * 3600000; // links are only valid for 24 hours, so there's never confusion about which is current
+
+// Creates one delivery_sessions row for a single cluster. Returns {ok:true} or
+// {ok:false, reason, error?} — no rendering/toasts here, so this can be reused
+// both by the per-cluster "Generate Link" button and the bulk "remaining" action.
+async function createClusterSession(idx) {
+  const el = $(`assign-${idx}`);
+  const vol = el ? el.value.trim() : (clusterAssignments[idx] || '');
+  clusterAssignments[idx] = vol;
+  if (!vol) return { ok: false, reason: 'unassigned' };
+
+  const cluster = sessionClusters[idx];
+  if (!cluster || cluster.length > MAX_STOPS_PER_VOLUNTEER) return { ok: false, reason: 'overcap' };
+
+  const base = window.location.href.split('?')[0];
+  const token = crypto.randomUUID().replace(/-/g, '');
+  const matchedVol = volunteersCache.find(v => v.name === vol);
+  const expiresAt = new Date(Date.now() + LINK_EXPIRY_MS).toISOString();
+
+  const { error } = await sb.from('delivery_sessions').insert({
+    volunteer_id: matchedVol ? matchedVol.id : null,
+    volunteer_name: vol,
+    token,
+    stop_household_ids: cluster.map(h => h.dbId),
+    expires_at: expiresAt,
+  });
+  if (error) { console.error('Failed to create delivery session:', error); return { ok: false, reason: 'error', error }; }
+
+  const url = `${base}?session=${token}&vol=${encodeURIComponent(vol)}`;
+  const isNew = !VOLUNTEER_NAMES.includes(vol);
+  clusterLinks[idx] = { token, url, vol, stops: cluster, expiresAt, isNew };
+  await logAudit('Delivery link created', `${cluster.length} stop${cluster.length>1?'s':''} for ${vol}`);
+  return { ok: true };
+}
+
+// Per-cluster "Generate Link" button — the primary way to issue links now:
+// as soon as one cluster is assigned, it can get its own link immediately,
+// without waiting for every other cluster to be finalized.
+async function generateClusterLink(idx) {
+  const result = await createClusterSession(idx);
+  if (!result.ok) {
+    if (result.reason === 'unassigned') toast('⚠️ Assign a volunteer to this cluster first.', 'warn');
+    else if (result.reason === 'overcap') toast(`⚠️ This cluster has more than ${MAX_STOPS_PER_VOLUNTEER} stops — split it before generating a link.`, 'warn');
+    else toast(`⚠️ Couldn't create link: ${result.error?.message || 'unknown error'}`);
+    return;
+  }
+  $('linksSection').style.display = '';
+  renderClusterCards();
+  renderLinks();
+  toast(`🔗 Link generated for ${clusterLinks[idx].vol}.`);
+}
+
+// Convenience bulk action: generates links for every assigned cluster that
+// doesn't already have one yet (skips clusters already generated individually).
+async function generateRemainingLinks() {
   sessionClusters.forEach((_, idx) => {
     const el = $(`assign-${idx}`);
     if (el) clusterAssignments[idx] = el.value.trim();
   });
 
-  const unassigned = sessionClusters.filter((_, idx) => !clusterAssignments[idx]);
-  if (unassigned.length) {
-    toast(`⚠️ ${unassigned.length} cluster${unassigned.length>1?'s':''} still unassigned.`, 'warn');
+  const targets = sessionClusters.map((_, idx) => idx).filter(idx => clusterAssignments[idx] && !clusterLinks[idx]);
+  if (!targets.length) {
+    toast('Nothing new to generate — assign a volunteer to a cluster, or every assigned cluster already has a link.', 'info');
     return;
   }
 
-  // Build one entry per volunteer (one vol can have multiple clusters)
-  const byVol = {};
-  sessionClusters.forEach((cluster, idx) => {
-    const vol = clusterAssignments[idx];
-    if (!byVol[vol]) byVol[vol] = [];
-    byVol[vol].push(...cluster);
-  });
-
-  const overCap = Object.entries(byVol).filter(([, stops]) => stops.length > MAX_STOPS_PER_VOLUNTEER);
-  if (overCap.length) {
-    const [firstVol, firstStops] = overCap[0];
-    toast(`⚠️ ${firstVol} is assigned ${firstStops.length} stops — the cap is ${MAX_STOPS_PER_VOLUNTEER} per volunteer. Split or reassign a cluster before generating links.`, 'warn');
-    return;
+  let successCount = 0;
+  for (const idx of targets) {
+    const result = await createClusterSession(idx);
+    if (result.ok) successCount++;
   }
-
-  const base = window.location.href.split('?')[0];
-  const expiresAt = new Date(Date.now() + 7*86400000).toISOString();
-
-  const results = await Promise.all(Object.entries(byVol).map(async ([vol, stops]) => {
-    const token = crypto.randomUUID().replace(/-/g, '');
-    const matchedVol = volunteersCache.find(v => v.name === vol);
-
-    const { error } = await sb.from('delivery_sessions').insert({
-      volunteer_id: matchedVol ? matchedVol.id : null,
-      volunteer_name: vol,
-      token,
-      stop_household_ids: stops.map(h => h.dbId),
-      expires_at: expiresAt,
-    });
-    if (error) { console.error('Failed to create delivery session:', error); return null; }
-
-    const url = `${base}?session=${token}&vol=${encodeURIComponent(vol)}`;
-    const isNew = !VOLUNTEER_NAMES.includes(vol);
-    return {vol, stops, token, url, isNew};
-  }));
-
-  generatedLinks = results.filter(Boolean);
-  if (generatedLinks.length < Object.keys(byVol).length) {
-    toast(`⚠️ Some links couldn't be created — check the console.`, 'warn');
-  }
-  if (!generatedLinks.length) return;
-
-  await logAudit('Delivery session created', `${sessionClusters.flat().length} stops across ${generatedLinks.length} volunteer${generatedLinks.length>1?'s':''}`);
-
   $('linksSection').style.display = '';
+  renderClusterCards();
   renderLinks();
-  toast(`🔗 ${generatedLinks.length} link${generatedLinks.length>1?'s':''} generated.`);
+  toast(`🔗 ${successCount} link${successCount!==1?'s':''} generated${successCount<targets.length?' — some failed, check console':''}.`);
 }
 
-function renderLinks() {
-  const newVols = generatedLinks.filter(l => l.isNew);
-
-  $('linksContainer').innerHTML = generatedLinks.map((lnk, i) => `
+function linkRowHtml(lnk, idx) {
+  const expired = new Date(lnk.expiresAt) < new Date();
+  return `
     <div class="link-row">
       <div>
         <div class="link-vol-name">
           ${lnk.vol}
           ${lnk.isNew ? '<span style="font-size:10px;background:var(--warn-bg);color:var(--warn);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">New</span>' : ''}
+          ${expired ? '<span style="font-size:10px;background:var(--danger-bg);color:var(--danger);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">Expired</span>' : ''}
         </div>
-        <div class="link-stops-count">${lnk.stops.length} stop${lnk.stops.length>1?'s':''} · ${lnk.stops.reduce((s,h)=>s+packsFor(h.size),0)} packs</div>
+        <div class="link-stops-count">${lnk.stops.length} stop${lnk.stops.length>1?'s':''} · ${lnk.stops.reduce((s,h)=>s+packsFor(h.size),0)} packs · ${expired?'expired':'expires'} ${fmtDateTime(lnk.expiresAt)}</div>
       </div>
       <div class="link-url-box" title="${lnk.url}">${lnk.url}</div>
       <div class="link-actions">
         <button class="copy-link-btn" onclick="copyLink('${lnk.url.replace(/'/g,"\\'")}')">📋 Copy</button>
         <button class="whatsapp-btn" onclick="sendWhatsApp('${encodeURIComponent(lnk.vol)}','${lnk.url.replace(/'/g,"\\'")}')">WhatsApp</button>
-        <button class="preview-btn" onclick="previewVolLink(${i})">👁 Preview</button>
+        <button class="preview-btn" onclick="previewVolLink(${idx})">👁 Preview</button>
       </div>
     </div>
-  `).join('');
+  `;
+}
+
+function renderLinks() {
+  const entries = Object.entries(clusterLinks);
+  const newVols = entries.filter(([,l]) => l.isNew).map(([,l]) => l);
+
+  $('linksContainer').innerHTML = entries.map(([idx, lnk]) => linkRowHtml(lnk, idx)).join('');
 
   // New-volunteer add-to-roster prompt
   if (newVols.length) {
@@ -2239,7 +2442,7 @@ async function addVolToRoster(name) {
     row.querySelector('.new-vol-actions').innerHTML = '<span style="font-size:12px;color:var(--st-active);font-weight:600">✓ Added to roster</span>';
   }
   // Update the link badge
-  generatedLinks.forEach(l => { if (l.vol === name) l.isNew = false; });
+  Object.values(clusterLinks).forEach(l => { if (l.vol === name) l.isNew = false; });
   toast(`✓ ${name} added to volunteer roster.`);
 }
 
@@ -2280,8 +2483,9 @@ async function loadVolunteerSession(token, displayName) {
   volName = displayName || 'Volunteer';
 }
 
-async function previewVolLink(linkIdx) {
-  const lnk = generatedLinks[linkIdx];
+async function previewVolLink(idx) {
+  const lnk = clusterLinks[idx];
+  if (!lnk) return;
   await loadVolunteerSession(lnk.token, lnk.vol);
   $('volBanner').style.display = '';
   switchView('volunteer');
