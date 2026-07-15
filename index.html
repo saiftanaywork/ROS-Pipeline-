@@ -605,11 +605,14 @@ tr.row-archived td{opacity:.6}
     <div class="tab-pane active" id="tab-households">
       <div class="page-hd">
         <div><div class="page-title">Households</div><div class="page-sub">All registered recipient families across DFW zones</div></div>
-        <div class="act-wrap">
-          <button class="btn btn-primary" onclick="toggleMenu('addHouseholdMenu')">+ Add Household ▾</button>
-          <div class="act-menu" id="menu-addHouseholdMenu">
-            <button class="act-item" onclick="closeMenus();openModal('addHousehold')">🏠 Add Single Household</button>
-            <button class="act-item" onclick="closeMenus();openBulkImport()">📄 Bulk Import (CSV)</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="exportHouseholdsCSV()" title="Exports the households currently shown below (respects filters/search) in the same format as the bulk import template">⬇ Export CSV</button>
+          <div class="act-wrap">
+            <button class="btn btn-primary" onclick="toggleMenu('addHouseholdMenu')">+ Add Household ▾</button>
+            <div class="act-menu" id="menu-addHouseholdMenu">
+              <button class="act-item" onclick="closeMenus();openModal('addHousehold')">🏠 Add Single Household</button>
+              <button class="act-item" onclick="closeMenus();openBulkImport()">📄 Bulk Import (CSV)</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1753,15 +1756,53 @@ function parseCSV(text) {
   return rows.filter(r => r.some(f => f.trim() !== ''));
 }
 
-function downloadImportTemplate() {
-  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
-  const csv = [IMPORT_COLUMNS, example].map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+function rowsToCSV(rows) {
+  return rows.map(r => r.map(f => `"${String(f??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+}
+
+function downloadCSV(csv, filename) {
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'dfw-ros-household-import-template.csv';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+function downloadImportTemplate() {
+  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
+  downloadCSV(rowsToCSV([IMPORT_COLUMNS, example]), 'dfw-ros-household-import-template.csv');
+}
+
+// Exports whatever the Households table currently shows (respects the active
+// status filter, zone filter, search box, and sort) in the same column
+// layout as the bulk import template, so it round-trips back in cleanly.
+async function exportHouseholdsCSV() {
+  const search = $('searchBox').value.toLowerCase();
+  const zone = $('zoneFilter').value;
+  let rows = households.filter(h => {
+    if (activeFilter === 'active'   && h.status !== 'active')   return false;
+    if (activeFilter === 'inactive' && h.status !== 'inactive') return false;
+    if (activeFilter === 'stale'    && !isStale(h))              return false;
+    if (zone   && h.zone   !== zone)   return false;
+    if (search && !h.name.toLowerCase().includes(search) && !h.address.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  rows = sortRows(rows);
+
+  if (!rows.length) { toast('⚠️ No households match the current filter to export.', 'warn'); return; }
+
+  const dataRows = rows.map(h => [
+    h.name, h.address, h.zone, String(h.size), String(h.adolescents),
+    '', // health/accessibility is no longer tracked as its own field — see Delivery Notes
+    h.dietary && h.dietary !== 'None' ? h.dietary : '',
+    h.phone || '',
+    h.notes || '',
+  ]);
+  downloadCSV(rowsToCSV([IMPORT_COLUMNS, ...dataRows]), `dfw-ros-households-export-${new Date().toISOString().slice(0,10)}.csv`);
+
+  await logAudit('Households exported', `${rows.length} household${rows.length!==1?'s':''} exported to CSV`);
+  toast(`⬇ ${rows.length} household${rows.length!==1?'s':''} exported.`);
 }
 
 function openBulkImport() {
@@ -2493,6 +2534,7 @@ async function sendCheckinWhatsApp(householdDbId) {
 const AUDIT_CATEGORIES = {
   'New household added':      'households',
   'Bulk import':               'households',
+  'Households exported':       'households',
   'Family graduated':         'households',
   'Family archived':          'households',
   'Household restored':       'households',
