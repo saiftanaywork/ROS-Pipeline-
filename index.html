@@ -945,7 +945,7 @@ tr.row-archived td{opacity:.6}
     <div class="modal-body">
       <div id="bulkImportUploadStep">
         <div class="info-box">
-          Download the template, fill in one row per household (same fields as "Add Single Household"), then drop the file back in below. <strong>Name, Address, Household Size, Zone, and Phone</strong> are required — rows missing any of those, or duplicating an existing address, will be flagged and skipped. Dietary and Delivery Notes are optional; missing ones just get a heads-up before import. <strong>Zone</strong> must match one of the existing zone names exactly.
+          Download the template (or use an export from another system with matching column names), fill in one row per household, then drop the file back in below. <strong>Household Name, Full Address, Household Size, Zone, and Phone Number</strong> are required — rows missing any of those, or duplicating an existing address, will be flagged and skipped. Adolescents, Health/Accessibility Notes, Dietary Restrictions, and Delivery Notes are optional; missing ones just get a heads-up before import. Health/Accessibility Notes get folded into Delivery Notes on import, since this app tracks that as one field. <strong>Zone</strong> must match one of the existing zone names exactly.
         </div>
         <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="downloadImportTemplate()">⬇ Download CSV Template</button>
         <div class="dropzone" id="importDropzone" onclick="document.getElementById('importFileInput').click()">
@@ -1726,7 +1726,7 @@ async function addHousehold() {
 // ════════════════════════════════════════════
 //  BULK IMPORT (CSV)
 // ════════════════════════════════════════════
-const IMPORT_COLUMNS = ['Name','Address','Zone','Household Size','Adolescents','Dietary','Phone','Delivery Notes'];
+const IMPORT_COLUMNS = ['Household Name','Full Address','Zone','Household Size','Adolescents','Health / Accessibility Notes','Dietary Restrictions','Phone Number','Delivery Notes'];
 let bulkImportRows = []; // parsed + validated rows, ready to insert
 
 // Minimal CSV parser — handles quoted fields (with embedded commas/newlines)
@@ -1754,7 +1754,7 @@ function parseCSV(text) {
 }
 
 function downloadImportTemplate() {
-  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
+  const example = ['Al-Hassan Family','123 Main St Apt 4, Dallas TX 75201','North Dallas','5','2','','Halal only, no pork','214-555-0100','Gate code 1234. Ring bell twice.'];
   const csv = [IMPORT_COLUMNS, example].map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
@@ -1781,18 +1781,30 @@ async function handleImportFile(file) {
   const rows = parseCSV(text);
   if (!rows.length) { toast('⚠️ That file has no rows.', 'warn'); return; }
 
-  // First row is the header — map by column name so column order in the
-  // uploaded file doesn't have to exactly match the template.
+  // First row is the header — recognized by column name (checking a few
+  // accepted spellings per field) so column order doesn't matter and both the
+  // current template and an external database's export line up automatically.
   const header = rows[0].map(h => h.trim().toLowerCase());
-  const col = name => header.indexOf(name.toLowerCase());
+  const col = (...names) => {
+    for (const name of names) {
+      const i = header.indexOf(name.toLowerCase());
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
   const idx = {
-    name: col('Name'), address: col('Address'), zone: col('Zone'),
-    size: col('Household Size'), adolescents: col('Adolescents'),
-    dietary: col('Dietary'), phone: col('Phone'),
-    notes: col('Delivery Notes'),
+    name: col('Household Name', 'Name'),
+    address: col('Full Address', 'Address'),
+    zone: col('Zone'),
+    size: col('Household Size'),
+    adolescents: col('Adolescents'),
+    health: col('Health / Accessibility Notes', 'Health'),
+    dietary: col('Dietary Restrictions', 'Dietary'),
+    phone: col('Phone Number', 'Phone'),
+    notes: col('Delivery Notes', 'Notes'),
   };
   if (idx.name === -1 || idx.address === -1) {
-    toast('⚠️ The file must have at least "Name" and "Address" columns — did you use the template?', 'warn');
+    toast('⚠️ The file must have at least a "Household Name" and "Full Address" column — did you use the template?', 'warn');
     return;
   }
 
@@ -1808,7 +1820,11 @@ async function handleImportFile(file) {
     const sizeRaw = get(idx.size);
     const size = parseInt(sizeRaw) || 0;
     const dietary = get(idx.dietary);
-    const notes = get(idx.notes);
+    const health = get(idx.health);
+    // This app doesn't track health/accessibility as its own field (not useful for a
+    // doorstep delivery) — fold it into delivery notes instead, same as the one-time
+    // migration that was run on the existing database.
+    const notes = [get(idx.notes), health].filter(Boolean).join(' | ');
 
     // Required fields: name, address, household size, zone, phone (contact info)
     const errors = [];
