@@ -739,7 +739,10 @@ tr.row-archived td{opacity:.6}
     <div class="tab-pane" id="tab-volunteers">
       <div class="page-hd">
         <div><div class="page-title">Volunteers</div><div class="page-sub">Zone assignments and delivery history</div></div>
-        <button class="btn btn-primary" onclick="openModal('addVolunteer')">+ Add Volunteer</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="openBulkImportVolunteers()">⬆ Bulk Import</button>
+          <button class="btn btn-primary" onclick="openModal('addVolunteer')">+ Add Volunteer</button>
+        </div>
       </div>
       <div class="filter-bar">
         <button class="f-btn on" data-volfilter="all" onclick="setVolFilter('all',this)">All</button>
@@ -996,6 +999,43 @@ tr.row-archived td{opacity:.6}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeBulkImport()">Close</button>
       <button class="btn btn-primary" id="bulkImportSubmitBtn" style="display:none" onclick="submitBulkImport()">Import Households</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-bulkImportVolunteers">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-hd"><div class="modal-title">Bulk Import Volunteers</div><button class="modal-close" onclick="closeBulkImportVolunteers()">×</button></div>
+    <div class="modal-body">
+      <div id="bulkImportVolUploadStep">
+        <div class="info-box">
+          Download the template, fill in one row per volunteer, then drop the file back in below. <strong>Volunteer Name and Phone Number</strong> are required — rows missing either, or duplicating an existing volunteer's phone number, will be flagged and skipped. <strong>Zone</strong> is optional (leave blank for "Unassigned") but must match one of the existing zone names exactly if filled in.
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="downloadVolunteerImportTemplate()">⬇ Download CSV Template</button>
+        <div class="dropzone" id="importVolDropzone" onclick="document.getElementById('importVolFileInput').click()">
+          <div class="dropzone-icon">📄</div>
+          <div class="dropzone-text"><strong>Click to choose a file</strong> or drag a CSV here</div>
+          <input type="file" id="importVolFileInput" accept=".csv" style="display:none">
+        </div>
+      </div>
+
+      <div id="bulkImportVolPreviewStep" style="display:none">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px" id="bulkImportVolSummary"></div>
+        <div class="tbl-wrap" style="max-height:340px;overflow-y:auto">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Zone</th><th>Status</th></tr></thead>
+            <tbody id="bulkImportVolPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="bulkImportVolResultStep" style="display:none">
+        <div id="bulkImportVolResultSummary"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeBulkImportVolunteers()">Close</button>
+      <button class="btn btn-primary" id="bulkImportVolSubmitBtn" style="display:none" onclick="submitVolunteerBulkImport()">Import Volunteers</button>
     </div>
   </div>
 </div>
@@ -2234,6 +2274,155 @@ async function submitBulkImport() {
   });
 })();
 
+const VOLUNTEER_IMPORT_COLUMNS = ['Volunteer Name','Phone Number','Zone'];
+let bulkImportVolRows = [];
+
+function normalizePhone(p) { return (p || '').replace(/\D/g, ''); }
+
+function downloadVolunteerImportTemplate() {
+  const example = ['Fatima Al-Sayed','214-555-0100','North Dallas'];
+  downloadCSV(rowsToCSV([VOLUNTEER_IMPORT_COLUMNS, example]), 'dfw-ros-volunteer-import-template.csv');
+}
+
+function openBulkImportVolunteers() {
+  bulkImportVolRows = [];
+  $('bulkImportVolUploadStep').style.display = '';
+  $('bulkImportVolPreviewStep').style.display = 'none';
+  $('bulkImportVolResultStep').style.display = 'none';
+  $('bulkImportVolSubmitBtn').style.display = 'none';
+  $('importVolFileInput').value = '';
+  openModal('bulkImportVolunteers');
+}
+function closeBulkImportVolunteers() { closeModal('bulkImportVolunteers'); }
+
+async function handleVolunteerImportFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  const rows = parseCSV(text);
+  if (!rows.length) { toast('⚠️ That file has no rows.', 'warn'); return; }
+
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const col = (...names) => {
+    for (const name of names) {
+      const i = header.indexOf(name.toLowerCase());
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+  const idx = {
+    name: col('Volunteer Name', 'Name'),
+    phone: col('Phone Number', 'Phone'),
+    zone: col('Zone'),
+  };
+  if (idx.name === -1 || idx.phone === -1) {
+    toast('⚠️ The file must have at least a "Volunteer Name" and "Phone Number" column — did you use the template?', 'warn');
+    return;
+  }
+
+  if (!zonesCache.length) await loadZonesCache();
+  if (!volunteersCache.length) await loadVolunteers();
+
+  const seenPhones = new Map(); // normalized phone → row # already claimed within this file
+  bulkImportVolRows = rows.slice(1).map((r, i) => {
+    const get = j => (j === -1 || j >= r.length) ? '' : r[j].trim();
+    const name = get(idx.name);
+    const phone = get(idx.phone);
+    const zoneName = get(idx.zone);
+
+    const errors = [];
+    if (!name) errors.push('Missing name');
+    if (!phone) errors.push('Missing phone');
+
+    let zone = null;
+    if (zoneName) {
+      zone = zonesCache.find(z => z.name.toLowerCase() === zoneName.toLowerCase());
+      if (!zone) errors.push(`Unknown zone "${zoneName}"`);
+    }
+
+    // Duplicate check: normalized phone digits, against both the existing
+    // roster and earlier rows already parsed from this same file.
+    const normPhone = normalizePhone(phone);
+    if (normPhone) {
+      const existingDup = volunteersCache.find(v => normalizePhone(v.phone) === normPhone);
+      if (existingDup) errors.push(`Duplicate of existing volunteer "${existingDup.name}"`);
+      else if (seenPhones.has(normPhone)) errors.push(`Duplicate of row ${seenPhones.get(normPhone)} in this file`);
+      else seenPhones.set(normPhone, i + 1);
+    }
+
+    return { name, phone, zoneName, zone, errors };
+  });
+
+  renderVolunteerImportPreview();
+}
+
+function renderVolunteerImportPreview() {
+  const okCount = bulkImportVolRows.filter(r => !r.errors.length).length;
+  const errCount = bulkImportVolRows.length - okCount;
+
+  $('bulkImportVolUploadStep').style.display = 'none';
+  $('bulkImportVolPreviewStep').style.display = '';
+  $('bulkImportVolSummary').innerHTML = `<strong>${bulkImportVolRows.length}</strong> row${bulkImportVolRows.length!==1?'s':''} found — <span class="import-row-ok">${okCount} ready to import</span>${errCount ? `, <span class="import-row-error">${errCount} with errors (will be skipped)</span>` : ''}.`;
+  $('bulkImportVolPreviewBody').innerHTML = bulkImportVolRows.map((r, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${esc(r.name) || '<span class="import-row-error">—</span>'}</td>
+      <td>${esc(r.phone) || '<span class="import-row-error">—</span>'}</td>
+      <td>${esc(r.zoneName) || '<span style="color:var(--text-muted)">Unassigned</span>'}</td>
+      <td>${r.errors.length ? `<span class="import-row-error">⚠ ${esc(r.errors.join('; '))}</span>` : '<span class="import-row-ok">✓ Ready</span>'}</td>
+    </tr>
+  `).join('');
+
+  $('bulkImportVolSubmitBtn').style.display = okCount ? '' : 'none';
+  $('bulkImportVolSubmitBtn').textContent = `Import ${okCount} Volunteer${okCount!==1?'s':''}`;
+}
+
+async function submitVolunteerBulkImport() {
+  const validRows = bulkImportVolRows.filter(r => !r.errors.length);
+  if (!validRows.length) return;
+
+  const btn = $('bulkImportVolSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+
+  const records = validRows.map(r => ({
+    name: r.name, phone: r.phone, zone_id: r.zone ? r.zone.id : null,
+  }));
+
+  const { error } = await sb.from('volunteers').insert(records);
+
+  $('bulkImportVolPreviewStep').style.display = 'none';
+  $('bulkImportVolResultStep').style.display = '';
+  btn.style.display = 'none';
+
+  if (error) {
+    console.error(error);
+    $('bulkImportVolResultSummary').innerHTML = `<div class="warning-box">⚠️ Import failed: ${esc(error.message)}</div>`;
+    return;
+  }
+
+  await logAudit('Volunteer bulk import', `${records.length} volunteer${records.length!==1?'s':''} added via CSV`);
+  $('bulkImportVolResultSummary').innerHTML = `<div class="info-box">✓ Imported ${records.length} volunteer${records.length!==1?'s':''} successfully.</div>`;
+  await renderVolunteersTab();
+  toast(`👥 ${records.length} volunteer${records.length!==1?'s':''} imported.`);
+}
+
+(function setupVolunteerImportDropzone() {
+  const zone = $('importVolDropzone');
+  const input = $('importVolFileInput');
+  if (!zone || !input) return;
+  input.addEventListener('change', () => handleVolunteerImportFile(input.files[0]));
+  ['dragenter','dragover'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault(); zone.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+  }));
+  zone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleVolunteerImportFile(file);
+  });
+})();
+
 // ════════════════════════════════════════════
 //  PENDING REVIEWS
 // ════════════════════════════════════════════
@@ -2825,6 +3014,7 @@ const AUDIT_CATEGORIES = {
   'Volunteer archived':       'volunteers',
   'Volunteer reactivated':    'volunteers',
   'Volunteer deleted':        'volunteers',
+  'Volunteer bulk import':    'volunteers',
   'Delivery link created':    'sessions',
   'Delivery session created': 'sessions',
   'Delivery confirmed':       'sessions',
