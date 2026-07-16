@@ -1122,6 +1122,33 @@ let currentSessionToken = null;    // delivery_sessions.token for the active vol
 // ════════════════════════════════════════════
 const $ = id => document.getElementById(id);
 
+// Escapes user-supplied text before it's interpolated into innerHTML — required
+// because household/application/suggested-edit data originates from unauthenticated
+// public forms and would otherwise let a submission execute script in an admin's
+// or volunteer's session (stored XSS).
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Safe to embed inside `onclick="fn('${...}')"` — escapes for the JS single-quoted
+// string first, then HTML-entity-encodes the result so it also can't break out of
+// the surrounding double-quoted HTML attribute.
+function escJs(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function dist(a, b) {
   return Math.sqrt((a.lat - b.lat) ** 2 + (a.lng - b.lng) ** 2);
 }
@@ -1237,7 +1264,7 @@ function fmtDateTime(ts) {
 function toast(msg, type = 'success') {
   const t = document.createElement('div');
   t.className = `toast t-${type}`;
-  t.innerHTML = msg;
+  t.textContent = msg;
   $('toastWrap').appendChild(t);
   setTimeout(() => t.remove(), 3500);
 }
@@ -1294,9 +1321,9 @@ async function renderVolunteersTab() {
     const st = statsByName[v.name] || { deliveries: 0, lastActive: null };
     return `
       <tr>
-        <td class="td-name" style="cursor:pointer;color:var(--accent)" onclick="openVolunteerEdit('${v.id}')">${v.name}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
-        <td>${v.phone || '—'}</td>
-        <td>${v.zones ? `<span class="chip">${v.zones.name}</span>` : '—'}</td>
+        <td class="td-name" style="cursor:pointer;color:var(--accent)" onclick="openVolunteerEdit('${v.id}')">${esc(v.name)}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
+        <td>${esc(v.phone) || '—'}</td>
+        <td>${v.zones ? `<span class="chip">${esc(v.zones.name)}</span>` : '—'}</td>
         <td>${st.deliveries}</td>
         <td>${st.lastActive ? fmt(st.lastActive.slice(0,10)) : '—'}</td>
       </tr>
@@ -1657,13 +1684,13 @@ function renderTable() {
     <tr class="${h.status==='inactive'?'row-archived':''}">
       <td><input type="checkbox" class="household-select" data-id="${h.id}" ${selectedHouseholdIds.has(h.id)?'checked':''} onchange="toggleHouseholdSelect(${h.id}, this.checked)"></td>
       <td>
-        <div class="td-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id})">${h.name}</div>
-        ${h.notes ? `<div class="td-note" title="${h.notes}">📌 ${h.notes}</div>` : ''}
+        <div class="td-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id})">${esc(h.name)}</div>
+        ${h.notes ? `<div class="td-note" title="${esc(h.notes)}">📌 ${esc(h.notes)}</div>` : ''}
       </td>
-      <td><span class="chip">${h.zone}</span></td>
+      <td><span class="chip">${esc(h.zone)}</span></td>
       <td>${h.size} people<br><span style="font-size:11px;color:var(--text-muted)">${h.adolescents} adolescents</span></td>
       <td><strong>${packsFor(h.size)}</strong></td>
-      <td style="font-size:12px;color:var(--text-muted);max-width:160px">${h.dietary||'—'}</td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:160px">${esc(h.dietary)||'—'}</td>
       <td>${statusBadge(h)}</td>
       <td style="font-size:12px;color:${isStale(h)?'var(--st-stale)':'var(--text-muted)'}">${fmt(h.lastUpdated)}</td>
       <td style="font-size:13px">${h.timesServed}${h.timesServed>=20&&h.status==='active'?' 🎓':''}</td>
@@ -1812,7 +1839,7 @@ async function addHousehold() {
 
   const dup = findDuplicateAddress(addr, null);
   if (dup) {
-    showAlertModal('⚠️ Possible Duplicate', `<p>This address already belongs to <strong>${dup.name}</strong> on record. A household wasn't added.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included in the address so it doesn't match.</p>`);
+    showAlertModal('⚠️ Possible Duplicate', `<p>This address already belongs to <strong>${esc(dup.name)}</strong> on record. A household wasn't added.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included in the address so it doesn't match.</p>`);
     return;
   }
 
@@ -2143,16 +2170,16 @@ function renderPendingList() {
     <div class="edit-card" style="${e.priority==='high'?'border-color:var(--danger)':''}">
       <div class="edit-card-hd">
         <div>
-          <div class="edit-card-name">${e.householdName} <span class="badge b-pending" style="vertical-align:middle">${e.fieldLabel}</span> ${e.priority==='high'?'<span class="badge" style="vertical-align:middle;background:var(--danger-bg);color:var(--danger)" title="Reported directly by the household via their monthly check-in">🔴 High Priority</span>':''}</div>
-          <div class="edit-card-meta">Submitted by ${e.submittedBy} · ${e.submittedAt}</div>
+          <div class="edit-card-name">${esc(e.householdName)} <span class="badge b-pending" style="vertical-align:middle">${esc(e.fieldLabel)}</span> ${e.priority==='high'?'<span class="badge" style="vertical-align:middle;background:var(--danger-bg);color:var(--danger)" title="Reported directly by the household via their monthly check-in">🔴 High Priority</span>':''}</div>
+          <div class="edit-card-meta">Submitted by ${esc(e.submittedBy)} · ${esc(e.submittedAt)}</div>
         </div>
       </div>
       <div class="diff-box">
-        <div><div class="diff-col-lbl">Current on record</div><div class="diff-old">${e.currentValue}</div></div>
+        <div><div class="diff-col-lbl">Current on record</div><div class="diff-old">${esc(e.currentValue)}</div></div>
         <div class="diff-arrow">→</div>
-        <div><div class="diff-col-lbl">Suggested change</div><div class="diff-new">${e.suggestedValue}</div></div>
+        <div><div class="diff-col-lbl">Suggested change</div><div class="diff-new">${esc(e.suggestedValue)}</div></div>
       </div>
-      ${e.note ? `<div class="edit-note">💬 "${e.note}"</div>` : ''}
+      ${e.note ? `<div class="edit-note">💬 "${esc(e.note)}"</div>` : ''}
       <div class="edit-actions">
         <button class="btn btn-approve" onclick="openApprove('${e.id}')">✓ Approve & Apply</button>
         <button class="btn btn-reject"  onclick="openReject('${e.id}')">✕ Reject</button>
@@ -2297,30 +2324,30 @@ function renderApplicationsList() {
       <div class="edit-card-hd">
         <div>
           <div class="edit-card-name">
-            ${a.full_name}
-            <span class="badge b-${a.status === 'pending' ? 'pending' : a.status === 'approved' ? 'active' : 'inactive'}" style="vertical-align:middle">${a.status}</span>
+            ${esc(a.full_name)}
+            <span class="badge b-${a.status === 'pending' ? 'pending' : a.status === 'approved' ? 'active' : 'inactive'}" style="vertical-align:middle">${esc(a.status)}</span>
             ${a.possible_duplicate_of ? `<span class="badge b-pending" style="vertical-align:middle" title="Phone matches an existing household on file">⚠ possible duplicate</span>` : ''}
           </div>
-          <div class="edit-card-meta">${a.phone} · ${a.email || 'no email'} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div>
+          <div class="edit-card-meta">${esc(a.phone)} · ${esc(a.email) || 'no email'} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div>
         </div>
       </div>
 
       <div class="diff-box" style="grid-template-columns:1fr">
         <div>
           <div class="diff-col-lbl">Address</div>
-          <div class="diff-old" style="color:var(--text)">${a.address}${a.apartment ? ', ' + a.apartment : ''}, ${a.city || ''} ${a.zip_code || ''}</div>
+          <div class="diff-old" style="color:var(--text)">${esc(a.address)}${a.apartment ? ', ' + esc(a.apartment) : ''}, ${esc(a.city) || ''} ${esc(a.zip_code) || ''}</div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0;font-size:13px">
         <div><div class="diff-col-lbl">Household size</div>${a.household_size}</div>
         <div><div class="diff-col-lbl">Children / Seniors</div>${a.children} / ${a.seniors}</div>
-        <div><div class="diff-col-lbl">Language</div>${a.preferred_language || '—'}</div>
+        <div><div class="diff-col-lbl">Language</div>${esc(a.preferred_language) || '—'}</div>
       </div>
-      ${a.dietary_restrictions ? `<div class="edit-note">🍽️ Dietary: ${a.dietary_restrictions}</div>` : ''}
-      ${a.allergies ? `<div class="edit-note">⚠️ Allergies: ${a.allergies}</div>` : ''}
-      ${a.emergency_contact_name ? `<div class="edit-note">📞 Emergency contact: ${a.emergency_contact_name} (${a.emergency_contact_phone || 'no phone'})</div>` : ''}
-      ${a.status === 'rejected' && a.rejection_reason ? `<div class="edit-note">✕ Rejected: ${a.rejection_reason}</div>` : ''}
+      ${a.dietary_restrictions ? `<div class="edit-note">🍽️ Dietary: ${esc(a.dietary_restrictions)}</div>` : ''}
+      ${a.allergies ? `<div class="edit-note">⚠️ Allergies: ${esc(a.allergies)}</div>` : ''}
+      ${a.emergency_contact_name ? `<div class="edit-note">📞 Emergency contact: ${esc(a.emergency_contact_name)} (${esc(a.emergency_contact_phone) || 'no phone'})</div>` : ''}
+      ${a.status === 'rejected' && a.rejection_reason ? `<div class="edit-note">✕ Rejected: ${esc(a.rejection_reason)}</div>` : ''}
 
       ${a.status === 'pending' ? `
         <div class="edit-actions" style="align-items:center;flex-wrap:wrap;gap:10px">
@@ -2578,8 +2605,8 @@ function renderCheckinsList() {
     const status = checkinStatusOf(request);
     return `
       <tr>
-        <td class="td-name">${h.name}</td>
-        <td><span class="chip">${h.zone}</span></td>
+        <td class="td-name">${esc(h.name)}</td>
+        <td><span class="chip">${esc(h.zone)}</span></td>
         <td style="font-size:12px;color:var(--text-muted)">${request ? fmt(request.sent_at.slice(0,10)) : '—'}</td>
         <td>${statusBadgeHtml(status)}</td>
         <td>
@@ -2729,9 +2756,9 @@ function renderAuditList() {
     <div class="audit-item">
       <div class="audit-dot"></div>
       <div>
-        <div class="audit-action">${a.action}</div>
-        <div class="audit-detail">${a.detail||''}</div>
-        <div class="audit-meta">${a.user_name} · ${fmtDateTime(a.created_at)}</div>
+        <div class="audit-action">${esc(a.action)}</div>
+        <div class="audit-detail">${esc(a.detail)||''}</div>
+        <div class="audit-meta">${esc(a.user_name)} · ${fmtDateTime(a.created_at)}</div>
       </div>
     </div>
   `).join('');
@@ -3008,9 +3035,9 @@ function renderClusterCards() {
 
               <!-- Info -->
               <div class="stop-detail" style="flex:1;min-width:0">
-                <div class="stop-stop-name">${h.name}</div>
-                <div class="stop-stop-addr">${h.address}</div>
-                ${h.notes?`<span class="stop-stop-note" style="background:${col.hbg};color:${col.txt}">📌 ${h.notes}</span>`:''}
+                <div class="stop-stop-name">${esc(h.name)}</div>
+                <div class="stop-stop-addr">${esc(h.address)}</div>
+                ${h.notes?`<span class="stop-stop-note" style="background:${col.hbg};color:${col.txt}">📌 ${esc(h.notes)}</span>`:''}
                 ${isStale(h)?`<span class="badge b-stale" style="margin-top:3px">Stale — verify address</span>`:''}
 
                 <!-- Skip form (inline) -->
@@ -3061,8 +3088,8 @@ function renderClusterCards() {
               ${unassigned.length ? unassigned.map(h=>`
                 <button class="act-item" onclick="addStopToCluster(${h.id},${idx})">
                   <div>
-                    <div style="font-weight:600;font-size:13px">${h.name}</div>
-                    <div style="font-size:11px;color:var(--text-muted)">${h.zone} · ${h.size} people</div>
+                    <div style="font-weight:600;font-size:13px">${esc(h.name)}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${esc(h.zone)} · ${h.size} people</div>
                   </div>
                 </button>
               `).join('') : '<div style="padding:12px 14px;font-size:12px;color:var(--text-muted)">All active stops are in the session.</div>'}
@@ -3200,7 +3227,7 @@ function linkRowHtml(lnk, idx) {
     <div class="link-row">
       <div>
         <div class="link-vol-name">
-          ${lnk.vol}
+          ${esc(lnk.vol)}
           ${lnk.isNew ? '<span style="font-size:10px;background:var(--warn-bg);color:var(--warn);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">New</span>' : ''}
           ${expired ? '<span style="font-size:10px;background:var(--danger-bg);color:var(--danger);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">Expired</span>' : ''}
         </div>
@@ -3208,8 +3235,8 @@ function linkRowHtml(lnk, idx) {
       </div>
       <div class="link-url-box" title="${lnk.url}">${lnk.url}</div>
       <div class="link-actions">
-        <button class="copy-link-btn" onclick="copyLink('${lnk.url.replace(/'/g,"\\'")}')">📋 Copy</button>
-        <button class="whatsapp-btn" onclick="sendWhatsApp('${encodeURIComponent(lnk.vol)}','${lnk.url.replace(/'/g,"\\'")}')">WhatsApp</button>
+        <button class="copy-link-btn" onclick="copyLink('${escJs(lnk.url)}')">📋 Copy</button>
+        <button class="whatsapp-btn" onclick="sendWhatsApp('${encodeURIComponent(lnk.vol)}','${escJs(lnk.url)}')">WhatsApp</button>
         <button class="preview-btn" onclick="previewVolLink(${idx})">👁 Preview</button>
       </div>
     </div>
@@ -3231,12 +3258,12 @@ function renderLinks() {
         ${newVols.map(l => `
           <div class="new-vol-row" id="newvolrow-${CSS.escape(l.vol)}">
             <div>
-              <div class="new-vol-name">${l.vol}</div>
+              <div class="new-vol-name">${esc(l.vol)}</div>
               <div class="new-vol-detail">${l.stops.length} stop${l.stops.length>1?'s':''} this session</div>
             </div>
             <div class="new-vol-actions">
-              <button class="btn-add-vol" onclick="addVolToRoster('${l.vol.replace(/'/g,"\\'")}')">+ Add to Roster</button>
-              <button class="btn-skip-vol" onclick="skipNewVol('${l.vol.replace(/'/g,"\\'")}')">Skip</button>
+              <button class="btn-add-vol" onclick="addVolToRoster('${escJs(l.vol)}')">+ Add to Roster</button>
+              <button class="btn-skip-vol" onclick="skipNewVol('${escJs(l.vol)}')">Skip</button>
             </div>
           </div>
         `).join('')}
@@ -3445,20 +3472,20 @@ function renderVolunteer() {
         <div class="stop-hd" onclick="toggleStop('${h.id}')">
           <div class="stop-num ${delivered?'done':''}">${delivered ? '✓' : i+1}</div>
           <div class="stop-info">
-            <div class="stop-name">${h.name}${delivered?' <span style="color:var(--st-active);font-size:12px;font-weight:500">· Delivered</span>':''}</div>
-            <div class="stop-addr">${h.address}</div>
+            <div class="stop-name">${esc(h.name)}${delivered?' <span style="color:var(--st-active);font-size:12px;font-weight:500">· Delivered</span>':''}</div>
+            <div class="stop-addr">${esc(h.address)}</div>
           </div>
           <span style="color:var(--text-light);font-size:18px;transition:transform .2s" id="chev-${h.id}">›</span>
         </div>
         <div class="stop-body" id="sbody-${h.id}">
           <div class="detail-row"><span class="detail-lbl">📦 Packs</span><strong>${packsFor(h.size)}</strong></div>
           <div class="detail-row"><span class="detail-lbl">👥 Household</span>${h.size} people, ${h.adolescents} adolescents</div>
-          <div class="detail-row"><span class="detail-lbl">🍽 Dietary</span>${h.dietary||'None listed'}</div>
-          ${h.notes ? `<div class="notes-box">📌 ${h.notes}</div>` : ''}
+          <div class="detail-row"><span class="detail-lbl">🍽 Dietary</span>${esc(h.dietary)||'None listed'}</div>
+          ${h.notes ? `<div class="notes-box">📌 ${esc(h.notes)}</div>` : ''}
           <div class="stop-actions">
             ${!delivered ? `<button class="btn btn-primary btn-sm" onclick="markDelivered('${h.id}')">✓ Mark Delivered</button>` : ''}
             <a class="map-link" href="https://maps.google.com/?q=${encodeURIComponent(h.address)}" target="_blank">🗺 Open in Maps</a>
-            <button class="copy-addr-btn" onclick="copyAddr('${h.address.replace(/'/g,"\\'")}')">📋 Copy Address</button>
+            <button class="copy-addr-btn" onclick="copyAddr('${escJs(h.address)}')">📋 Copy Address</button>
             <button class="suggest-btn" onclick="openSuggest('${h.id}')">✏ Suggest Edit</button>
           </div>
         </div>
@@ -3598,7 +3625,7 @@ function renderProfile() {
   $('profileContent').innerHTML = `
     <div class="profile-hd">
       <div>
-        <div class="profile-name">${h.name}</div>
+        <div class="profile-name">${esc(h.name)}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${statusBadge(h)}
@@ -3615,7 +3642,7 @@ function renderProfile() {
       </div>
     </div>
     <div class="profile-meta">
-      <span>📍 ${h.zone}</span>
+      <span>📍 ${esc(h.zone)}</span>
       <span>·</span>
       <span>📦 ${h.timesServed} deliveries</span>
       <span>·</span>
@@ -3634,9 +3661,9 @@ function renderProfile() {
               Address
               <button class="edit-btn" onclick="toggleFieldEdit('address')">✏ Edit</button>
             </div>
-            <div class="field-val" id="fval-address">${h.address}</div>
+            <div class="field-val" id="fval-address">${esc(h.address)}</div>
             <div class="field-edit-wrap" id="fedit-address">
-              <input class="field-edit-input" id="finput-address" value="${h.address}" placeholder="Full address…">
+              <input class="field-edit-input" id="finput-address" value="${esc(h.address)}" placeholder="Full address…">
               <div class="field-edit-actions">
                 <button class="btn-save-field" onclick="saveField('address')">Save</button>
                 <button class="btn-cancel-field" onclick="toggleFieldEdit('address')">Cancel</button>
@@ -3649,9 +3676,9 @@ function renderProfile() {
               Phone
               <button class="edit-btn" onclick="toggleFieldEdit('phone')">✏ Edit</button>
             </div>
-            <div class="field-val" id="fval-phone">${h.phone || '—'}</div>
+            <div class="field-val" id="fval-phone">${esc(h.phone) || '—'}</div>
             <div class="field-edit-wrap" id="fedit-phone">
-              <input class="field-edit-input" id="finput-phone" value="${h.phone||''}" placeholder="Phone number…">
+              <input class="field-edit-input" id="finput-phone" value="${esc(h.phone)}" placeholder="Phone number…">
               <div class="field-edit-actions">
                 <button class="btn-save-field" onclick="saveField('phone')">Save</button>
                 <button class="btn-cancel-field" onclick="toggleFieldEdit('phone')">Cancel</button>
@@ -3664,9 +3691,9 @@ function renderProfile() {
               Delivery Window
               <button class="edit-btn" onclick="toggleFieldEdit('deliveryWindow')">✏ Edit</button>
             </div>
-            <div class="field-val" id="fval-deliveryWindow">${h.deliveryWindow || '—'}</div>
+            <div class="field-val" id="fval-deliveryWindow">${esc(h.deliveryWindow) || '—'}</div>
             <div class="field-edit-wrap" id="fedit-deliveryWindow">
-              <input class="field-edit-input" id="finput-deliveryWindow" value="${h.deliveryWindow||''}" placeholder="e.g. 9am–12pm">
+              <input class="field-edit-input" id="finput-deliveryWindow" value="${esc(h.deliveryWindow)}" placeholder="e.g. 9am–12pm">
               <div class="field-edit-actions">
                 <button class="btn-save-field" onclick="saveField('deliveryWindow')">Save</button>
                 <button class="btn-cancel-field" onclick="toggleFieldEdit('deliveryWindow')">Cancel</button>
@@ -3684,10 +3711,10 @@ function renderProfile() {
               <button class="edit-btn" onclick="toggleFieldEdit('notes')">✏ Edit</button>
             </div>
             <div class="field-val" id="fval-notes" style="font-style:${h.notes?'normal':'italic'};color:${h.notes?'var(--text)':'var(--text-light)'}">
-              ${h.notes || 'No delivery notes yet.'}
+              ${esc(h.notes) || 'No delivery notes yet.'}
             </div>
             <div class="field-edit-wrap" id="fedit-notes">
-              <textarea class="field-edit-input" id="finput-notes" style="min-height:80px;resize:vertical" placeholder="Gate codes, floor, access instructions…">${h.notes||''}</textarea>
+              <textarea class="field-edit-input" id="finput-notes" style="min-height:80px;resize:vertical" placeholder="Gate codes, floor, access instructions…">${esc(h.notes)}</textarea>
               <div class="field-edit-actions">
                 <button class="btn-save-field" onclick="saveField('notes')">Save</button>
                 <button class="btn-cancel-field" onclick="toggleFieldEdit('notes')">Cancel</button>
@@ -3731,7 +3758,7 @@ function renderProfile() {
 
           <div class="field-row">
             <div class="field-label">Zone</div>
-            <div class="field-val"><span class="chip">${h.zone}</span></div>
+            <div class="field-val"><span class="chip">${esc(h.zone)}</span></div>
           </div>
 
           <div class="field-row">
@@ -3749,10 +3776,10 @@ function renderProfile() {
               <button class="edit-btn" onclick="toggleFieldEdit('dietary')">✏ Edit</button>
             </div>
             <div class="field-val" id="fval-dietary" style="color:${h.dietary&&h.dietary!=='None'?'var(--text)':'var(--text-muted)'}">
-              ${h.dietary || 'None noted'}
+              ${esc(h.dietary) || 'None noted'}
             </div>
             <div class="field-edit-wrap" id="fedit-dietary">
-              <input class="field-edit-input" id="finput-dietary" value="${h.dietary||''}" placeholder="e.g. Halal, no pork, no shellfish…">
+              <input class="field-edit-input" id="finput-dietary" value="${esc(h.dietary)}" placeholder="e.g. Halal, no pork, no shellfish…">
               <div class="field-edit-actions">
                 <button class="btn-save-field" onclick="saveField('dietary')">Save</button>
                 <button class="btn-cancel-field" onclick="toggleFieldEdit('dietary')">Cancel</button>
@@ -3790,13 +3817,13 @@ function renderNotesList(h) {
   return [...h.visitNotes].reverse().map(n => `
     <div class="note-entry" id="note-${n.id}">
       <div class="note-entry-hd">
-        <div class="note-author">${n.author}</div>
+        <div class="note-author">${esc(n.author)}</div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="note-date">${n.date}</div>
+          <div class="note-date">${esc(n.date)}</div>
           <button onclick="deleteNote('${n.id}')" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px" title="Delete note">✕</button>
         </div>
       </div>
-      <div class="note-text">${n.text}</div>
+      <div class="note-text">${esc(n.text)}</div>
     </div>
   `).join('');
 }
@@ -3843,7 +3870,7 @@ async function saveField(field) {
   if (field === 'address') {
     const dup = findDuplicateAddress(val, h.id);
     if (dup) {
-      showAlertModal('⚠️ Possible Duplicate', `<p>That address already belongs to <strong>${dup.name}</strong> on record. The change wasn't saved.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included so it doesn't match.</p>`);
+      showAlertModal('⚠️ Possible Duplicate', `<p>That address already belongs to <strong>${esc(dup.name)}</strong> on record. The change wasn't saved.</p><p style="margin-top:10px;color:var(--text-muted);font-size:12px">If this is a different family at a different unit, make sure the apartment/unit number is included so it doesn't match.</p>`);
       return;
     }
   }
