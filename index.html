@@ -622,17 +622,24 @@ tr.row-archived td{opacity:.6}
         <button class="f-btn" data-filter="active" onclick="setFilter('active',this)" title="Currently receiving deliveries.">🟢 Active</button>
         <button class="f-btn" data-filter="inactive" onclick="setFilter('inactive',this)" title="No longer receiving deliveries — either graduated (a good outcome, like SNAP or a new job) or archived (an administrative issue, like a bad address). Their record is kept, not deleted.">⚫ Inactive</button>
         <button class="f-btn" data-filter="stale" onclick="setFilter('stale',this)" title="Still active, but this record hasn't been touched in 25+ days — the address or notes may be out of date. Worth double-checking before the next delivery.">⚠️ Stale</button>
-        <select class="search-box" id="zoneFilter" onchange="renderTable()" style="min-width:130px">
+        <select class="search-box" id="zoneFilter" onchange="renderTable();saveUIState()" style="min-width:130px">
           <option value="">All Zones</option>
         </select>
-        <input class="search-box ml-auto" type="text" placeholder="Search…" id="searchBox" oninput="renderTable()" style="max-width:200px">
+        <input class="search-box ml-auto" type="text" placeholder="Search…" id="searchBox" oninput="renderTable();saveUIState()" style="max-width:200px">
       </div>
       <div class="session-tip" style="margin-bottom:16px">
         💡 <strong>Inactive</strong> = no longer on delivery routes (graduated with a positive outcome, or archived for an administrative reason) — history is kept, nothing is deleted. <strong>Stale</strong> = still active, but not updated in 25+ days — the address or notes might be out of date.
       </div>
+      <div id="bulkActionBar" style="display:none;align-items:center;gap:10px;background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--r);padding:10px 16px;margin-bottom:12px">
+        <strong id="bulkSelectedCount">0</strong> selected
+        <button class="btn btn-sm btn-approve" onclick="bulkRestore()">↩ Restore Selected</button>
+        <button class="btn btn-sm btn-danger" onclick="openBulkRemove()">🚫 Archive Selected</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearHouseholdSelection()" style="margin-left:auto">Clear</button>
+      </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="selectAllHouseholds" onchange="toggleSelectAllHouseholds(this)"></th>
             <th class="th-sort" onclick="setSort('name')">Family<span class="sort-ind" id="sort-ind-name"></span></th>
             <th class="th-sort" onclick="setSort('zone')">Zone<span class="sort-ind" id="sort-ind-zone"></span></th>
             <th class="th-sort" onclick="setSort('size')">Size<span class="sort-ind" id="sort-ind-size"></span></th>
@@ -740,10 +747,13 @@ tr.row-archived td{opacity:.6}
     <div class="tab-pane" id="tab-checkins">
       <div class="page-hd">
         <div><div class="page-title">Check-Ins</div><div class="page-sub">Monthly "are you still with us?" form sent to every active household</div></div>
-        <button class="btn btn-primary" onclick="generateCheckinBatch()">✅ Generate This Month's Check-Ins</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="copyAllCheckinLinks()" title="Copies every pending check-in link as a text list, ready to paste into a WhatsApp broadcast">📋 Copy All Links</button>
+          <button class="btn btn-primary" onclick="generateCheckinBatch()">✅ Generate This Month's Check-Ins</button>
+        </div>
       </div>
       <div class="session-tip" style="margin-bottom:16px">
-        💡 Generating creates a check-in link for every active household that doesn't already have one pending. Tap "Send via WhatsApp" to actually deliver it — nothing sends automatically. A household is <strong>Overdue</strong> if it's been 10+ days with no reply; that's your cue to follow up.
+        💡 Generating creates a check-in link for every active household that doesn't already have one pending. Tap "Send via WhatsApp" to send one at a time, or "Copy All Links" to paste the whole list into a WhatsApp broadcast in one go — nothing sends automatically. A household is <strong>Overdue</strong> if it's been 10+ days with no reply; that's your cue to follow up.
       </div>
       <div class="filter-bar">
         <button class="f-btn on" data-checkinfilter="all" onclick="setCheckinFilter('all',this)">All</button>
@@ -1093,6 +1103,8 @@ const CLUSTER_PALETTE = [
 // ── App state ──
 let activeFilter   = 'all';
 let tableSort      = { col: null, dir: 1 };
+let selectedHouseholdIds = new Set();
+let bulkRemoveIds = null; // set while the "remove" modal is being used in bulk mode
 let activeThreshold = 0.012;
 const MAX_STOPS_PER_VOLUNTEER = 6; // a volunteer shouldn't be handed more stops than fit in one reasonable trip
 let sessionClusters = [];          // array of arrays of household objects
@@ -1484,7 +1496,9 @@ document.querySelectorAll('.modal-backdrop').forEach(b => {
 // ════════════════════════════════════════════
 //  TABS
 // ════════════════════════════════════════════
+let currentTab = 'households';
 function showTab(id) {
+  currentTab = id;
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   $(`tab-${id}`).classList.add('active');
@@ -1496,6 +1510,38 @@ function showTab(id) {
   if (id === 'audit')    renderAudit();
   if (id === 'volunteers') renderVolunteersTab();
   if (id === 'checkins') renderCheckinsTab();
+  saveUIState();
+}
+
+// Remembers which tab and Households filters an admin last used, so
+// returning to the app doesn't reset to defaults every login.
+const UI_STATE_KEY = 'dfwRosUIState';
+function saveUIState() {
+  try {
+    localStorage.setItem(UI_STATE_KEY, JSON.stringify({
+      tab: currentTab,
+      filter: activeFilter,
+      zone: $('zoneFilter') ? $('zoneFilter').value : '',
+      search: $('searchBox') ? $('searchBox').value : '',
+      sortCol: tableSort.col,
+      sortDir: tableSort.dir,
+    }));
+  } catch (e) { /* localStorage unavailable — just skip persistence */ }
+}
+
+function restoreUIState() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(UI_STATE_KEY) || 'null'); } catch (e) { return; }
+  if (!s) return;
+
+  if (s.zone) $('zoneFilter').value = s.zone;
+  if (s.search) $('searchBox').value = s.search;
+  if (s.sortCol) { tableSort.col = s.sortCol; tableSort.dir = s.sortDir || 1; }
+  if (s.filter && s.filter !== 'all') {
+    const btn = document.querySelector(`[data-filter="${s.filter}"]`);
+    if (btn) setFilter(s.filter, btn);
+  }
+  if (s.tab && s.tab !== 'households') showTab(s.tab);
 }
 
 // ════════════════════════════════════════════
@@ -1530,6 +1576,60 @@ function setFilter(f, btn) {
   const map = {all:'on', active:'on-active', inactive:'on-archived', stale:'on-stale'};
   btn.classList.add(map[f] || 'on');
   renderTable();
+  saveUIState();
+}
+
+// ── Bulk select/archive ──
+function toggleHouseholdSelect(id, checked) {
+  if (checked) selectedHouseholdIds.add(id); else selectedHouseholdIds.delete(id);
+  renderBulkActionBar();
+}
+
+function toggleSelectAllHouseholds(checkbox) {
+  document.querySelectorAll('.household-select').forEach(cb => {
+    const id = parseInt(cb.dataset.id);
+    if (checkbox.checked) selectedHouseholdIds.add(id); else selectedHouseholdIds.delete(id);
+    cb.checked = checkbox.checked;
+  });
+  renderBulkActionBar();
+}
+
+function renderBulkActionBar() {
+  const bar = $('bulkActionBar');
+  if (!bar) return;
+  if (!selectedHouseholdIds.size) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  $('bulkSelectedCount').textContent = selectedHouseholdIds.size;
+}
+
+function clearHouseholdSelection() {
+  selectedHouseholdIds.clear();
+  document.querySelectorAll('.household-select').forEach(cb => cb.checked = false);
+  const selectAll = $('selectAllHouseholds');
+  if (selectAll) selectAll.checked = false;
+  renderBulkActionBar();
+}
+
+function openBulkRemove() {
+  if (!selectedHouseholdIds.size) return;
+  bulkRemoveIds = [...selectedHouseholdIds];
+  $('removeHouseholdName').textContent = `${bulkRemoveIds.length} households selected`;
+  $('removeReason').value = '';
+  $('removeNotes').value = '';
+  openModal('remove');
+}
+
+async function bulkRestore() {
+  if (!selectedHouseholdIds.size) return;
+  const targets = [...selectedHouseholdIds].map(id => households.find(h => h.id === id)).filter(Boolean);
+  const { error } = await sb.from('households').update({ status: 'active', inactive_reason: null }).in('id', targets.map(h => h.dbId));
+  if (error) { console.error(error); toast(`⚠️ Couldn't restore: ${error.message}`); return; }
+
+  targets.forEach(h => { h.status = 'active'; h.inactiveReason = null; });
+  await logAudit('Households restored (bulk)', `${targets.length} households restored to active`);
+  clearHouseholdSelection();
+  renderAll();
+  toast(`↩ ${targets.length} households restored.`, 'info');
 }
 
 function renderTable() {
@@ -1549,12 +1649,13 @@ function renderTable() {
   updateSortIndicators();
 
   if (!rows.length) {
-    $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No households match this filter.</td></tr>`;
+    $('householdTbody').innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted)">No households match this filter.</td></tr>`;
     return;
   }
 
   $('householdTbody').innerHTML = rows.map(h => `
     <tr class="${h.status==='inactive'?'row-archived':''}">
+      <td><input type="checkbox" class="household-select" data-id="${h.id}" ${selectedHouseholdIds.has(h.id)?'checked':''} onchange="toggleHouseholdSelect(${h.id}, this.checked)"></td>
       <td>
         <div class="td-name" style="cursor:pointer;color:var(--accent)" onclick="showProfile(${h.id})">${h.name}</div>
         ${h.notes ? `<div class="td-note" title="${h.notes}">📌 ${h.notes}</div>` : ''}
@@ -1596,6 +1697,7 @@ function setSort(col) {
   if (tableSort.col === col) tableSort.dir *= -1;
   else { tableSort.col = col; tableSort.dir = 1; }
   renderTable();
+  saveUIState();
 }
 
 function sortRows(rows) {
@@ -1643,6 +1745,7 @@ function renderStats() {
 // ── Graduate / Archive / Restore ──
 function openRemove(id) {
   pendingHouseholdId = id;
+  bulkRemoveIds = null;
   $('removeHouseholdName').textContent = households.find(h => h.id===id).name;
   $('removeReason').value = '';
   $('removeNotes').value = '';
@@ -1650,14 +1753,28 @@ function openRemove(id) {
 }
 async function confirmRemove() {
   if (!$('removeReason').value) { toast('⚠️ Please select a reason.','warn'); return; }
-  const h = households.find(x => x.id===pendingHouseholdId);
   const inactiveReason = $('removeReason').value;
   const note = $('removeNotes').value;
   const positive = isPositiveReason(inactiveReason);
   const reasonText = $('removeReason').options[$('removeReason').selectedIndex].text;
-
   const update = { status: 'inactive', inactive_reason: inactiveReason };
   if (note) update.notes = note;
+
+  if (bulkRemoveIds) {
+    const targets = bulkRemoveIds.map(id => households.find(h => h.id === id)).filter(Boolean);
+    const { error } = await sb.from('households').update(update).in('id', targets.map(h => h.dbId));
+    if (error) { console.error(error); toast(`⚠️ Couldn't update: ${error.message}`); return; }
+    targets.forEach(h => { h.status = 'inactive'; h.inactiveReason = inactiveReason; if (note) h.notes = note; });
+    await logAudit(positive ? 'Families graduated (bulk)' : 'Families archived (bulk)', `${targets.length} households — ${reasonText}`);
+    bulkRemoveIds = null;
+    closeModal('remove');
+    clearHouseholdSelection();
+    renderAll();
+    toast(positive ? `🎓 ${targets.length} households graduated.` : `📦 ${targets.length} households marked inactive.`, 'info');
+    return;
+  }
+
+  const h = households.find(x => x.id===pendingHouseholdId);
   const { error } = await sb.from('households').update(update).eq('id', h.dbId);
   if (error) { console.error(error); toast(`⚠️ Couldn't update: ${error.message}`); return; }
 
@@ -2481,17 +2598,16 @@ function checkinUrl(token) {
   return `${base}?checkin=${token}`;
 }
 
-async function generateCheckinBatch() {
+// Creates a fresh check-in link for every active household that doesn't
+// already have one pending. Returns the number created (0 if none needed, or
+// -1 on error) — no toasts here, so this can be reused silently.
+async function ensureCheckinsGenerated() {
   const active = households.filter(h => h.status === 'active');
   const withoutPending = active.filter(h => {
     const entry = checkinsCache.find(c => c.household.id === h.id);
     return !entry || !entry.request || entry.request.status === 'responded';
   });
-
-  if (!withoutPending.length) {
-    toast('Every active household already has a pending check-in.', 'info');
-    return;
-  }
+  if (!withoutPending.length) return 0;
 
   const expiresAt = new Date(Date.now() + 45*86400000).toISOString();
   const records = withoutPending.map(h => ({
@@ -2501,11 +2617,37 @@ async function generateCheckinBatch() {
   }));
 
   const { error } = await sb.from('checkin_requests').insert(records);
-  if (error) { console.error(error); toast(`⚠️ Couldn't generate check-ins: ${error.message}`); return; }
+  if (error) { console.error(error); return -1; }
 
   await logAudit('Check-ins generated', `${records.length} household${records.length!==1?'s':''}`);
   await renderCheckinsTab();
-  toast(`✅ ${records.length} check-in link${records.length!==1?'s':''} generated.`);
+  return records.length;
+}
+
+async function generateCheckinBatch() {
+  const count = await ensureCheckinsGenerated();
+  if (count === -1) { toast(`⚠️ Couldn't generate check-ins — check the console.`, 'warn'); return; }
+  if (count === 0) { toast('Every active household already has a pending check-in.', 'info'); return; }
+  toast(`✅ ${count} check-in link${count!==1?'s':''} generated.`);
+}
+
+// Copies every currently-pending check-in link as a plain text list —
+// generating fresh links first for anyone who doesn't have one yet — so the
+// admin can paste the whole batch into a WhatsApp broadcast in one go instead
+// of tapping "Send via WhatsApp" one household at a time.
+async function copyAllCheckinLinks() {
+  const count = await ensureCheckinsGenerated();
+  if (count === -1) { toast(`⚠️ Couldn't generate check-ins — check the console.`, 'warn'); return; }
+
+  const rows = checkinsCache.filter(c => c.request && c.request.status === 'pending');
+  if (!rows.length) { toast('No pending check-in links to copy.', 'info'); return; }
+
+  const lines = [`DFW ROS Monthly Check-Ins — ${TODAY.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`, ''];
+  rows.forEach(({household, request}) => lines.push(`${household.name}: ${checkinUrl(request.token)}`));
+
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    toast(`📋 Copied ${rows.length} check-in link${rows.length!==1?'s':''}.`);
+  });
 }
 
 async function sendCheckinWhatsApp(householdDbId) {
@@ -2537,7 +2679,10 @@ const AUDIT_CATEGORIES = {
   'Households exported':       'households',
   'Family graduated':         'households',
   'Family archived':          'households',
+  'Families graduated (bulk)':'households',
+  'Families archived (bulk)': 'households',
   'Household restored':       'households',
+  'Households restored (bulk)':'households',
   'Field updated':            'households',
   'Visit note added':         'households',
   'Application approved':     'applications',
@@ -3229,12 +3374,13 @@ async function enterAdmin() {
   $('loginScreen').style.display  = 'none';
   $('adminShell').style.display   = 'flex';
 
-  $('householdTbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
+  $('householdTbody').innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted)">Loading households…</td></tr>`;
   await loadHouseholdsFromSupabase();
   await Promise.all([loadSuggestedEdits(), loadVolunteers(), loadZonesCache(), renderCheckinsTab()]);
   refreshApplicationsBadge();
 
   renderAll();
+  restoreUIState();
   toast(`Welcome back, ${currentUser.name}! 👋`);
 }
 
