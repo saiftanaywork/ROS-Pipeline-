@@ -438,6 +438,12 @@ tr.row-archived td{opacity:.6}
 
       <div class="login-error" id="applyError"></div>
 
+      <!-- Honeypot: invisible to real users, catnip to basic bots. Left blank = human. -->
+      <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
+        <label class="form-label" for="applyCompany">Company</label>
+        <input class="form-input" id="applyCompany" name="company" tabindex="-1" autocomplete="off">
+      </div>
+
       <div class="section-title" style="margin-top:8px">Contact Info</div>
       <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="applyName" placeholder="Your full name"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -735,9 +741,14 @@ tr.row-archived td{opacity:.6}
         <div><div class="page-title">Volunteers</div><div class="page-sub">Zone assignments and delivery history</div></div>
         <button class="btn btn-primary" onclick="openModal('addVolunteer')">+ Add Volunteer</button>
       </div>
+      <div class="filter-bar">
+        <button class="f-btn on" data-volfilter="all" onclick="setVolFilter('all',this)">All</button>
+        <button class="f-btn" data-volfilter="active" onclick="setVolFilter('active',this)">Active</button>
+        <button class="f-btn" data-volfilter="archived" onclick="setVolFilter('archived',this)">Archived</button>
+      </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Zone</th><th>Deliveries</th><th>Last Active</th></tr></thead>
+          <thead><tr><th>Volunteer</th><th>Phone</th><th>Zone</th><th>Deliveries</th><th>Last Active</th><th></th></tr></thead>
           <tbody id="volunteersTbody"></tbody>
         </table>
       </div>
@@ -1010,13 +1021,10 @@ tr.row-archived td{opacity:.6}
   <div class="modal">
     <div class="modal-hd"><div class="modal-title">Edit Volunteer</div><button class="modal-close" onclick="closeModal('editVolunteer')">×</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="editVolName" placeholder="e.g. Fatima Al-Sayed"></div>
+      <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="editVolName"></div>
       <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="editVolPhone" placeholder="214-555-0000"></div>
       <div class="form-group"><label class="form-label">Zone</label><select class="form-select" id="editVolZone"><option value="">Unassigned</option></select></div>
-      <div class="form-group">
-        <label class="form-label">Status</label>
-        <select class="form-select" id="editVolActive"><option value="true">Active — shows up in autocomplete for new assignments</option><option value="false">Inactive — kept on record, hidden from assignment</option></select>
-      </div>
+      <div id="editVolStats" style="font-size:12px;color:var(--text-muted);margin-top:2px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('editVolunteer')">Cancel</button>
@@ -1105,6 +1113,9 @@ let activeFilter   = 'all';
 let tableSort      = { col: null, dir: 1 };
 let selectedHouseholdIds = new Set();
 let bulkRemoveIds = null; // set while the "remove" modal is being used in bulk mode
+let volFilter = 'all';
+let volunteerSessionStats = {};  // { [volunteerName]: { deliveries, lastActive } }, refreshed on each render
+let volunteerSessionsCache = []; // raw delivery_sessions rows, used to gate hard-delete
 let activeThreshold = 0.012;
 const MAX_STOPS_PER_VOLUNTEER = 6; // a volunteer shouldn't be handed more stops than fit in one reasonable trip
 let sessionClusters = [];          // array of arrays of household objects
@@ -1297,38 +1308,122 @@ async function loadSuggestedEdits() {
   suggestedEdits.sort((a, b) => (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0));
 }
 
+function setVolFilter(f, btn) {
+  volFilter = f;
+  document.querySelectorAll('[data-volfilter]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderVolunteersTab();
+}
+
+function initialsOf(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+}
+
+function avatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return CLUSTER_PALETTE[hash % CLUSTER_PALETTE.length];
+}
+
 async function renderVolunteersTab() {
-  $('volunteersTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>`;
+  $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>`;
   await loadVolunteers();
 
-  const { data: sessions, error } = await sb.from('delivery_sessions').select('volunteer_name, delivered_ids, created_at');
+  const { data: sessions, error } = await sb.from('delivery_sessions').select('volunteer_id, volunteer_name, delivered_ids, created_at');
   if (error) console.error('Failed to load delivery sessions:', error);
+  volunteerSessionsCache = sessions || [];
 
   const statsByName = {};
-  (sessions || []).forEach(s => {
+  volunteerSessionsCache.forEach(s => {
     const st = statsByName[s.volunteer_name] || { deliveries: 0, lastActive: null };
     st.deliveries += (s.delivered_ids || []).length;
     if (!st.lastActive || new Date(s.created_at) > new Date(st.lastActive)) st.lastActive = s.created_at;
     statsByName[s.volunteer_name] = st;
   });
+  volunteerSessionStats = statsByName;
 
   if (!volunteersCache.length) {
-    $('volunteersTbody').innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">No volunteers yet — add one, or they'll appear here automatically after their first delivery session.</td></tr>`;
+    $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No volunteers yet — add one, or they'll appear here automatically after their first delivery session.</td></tr>`;
     return;
   }
 
-  $('volunteersTbody').innerHTML = volunteersCache.map(v => {
+  const rows = volunteersCache.filter(v => volFilter === 'all' ? true : volFilter === 'active' ? v.active : !v.active);
+  if (!rows.length) {
+    $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No ${volFilter} volunteers.</td></tr>`;
+    return;
+  }
+
+  $('volunteersTbody').innerHTML = rows.map(v => {
     const st = statsByName[v.name] || { deliveries: 0, lastActive: null };
+    const col = avatarColor(v.name);
     return `
-      <tr>
-        <td class="td-name" style="cursor:pointer;color:var(--accent)" onclick="openVolunteerEdit('${v.id}')">${esc(v.name)}${!v.active ? ' <span class="badge b-archived">Inactive</span>' : ''}</td>
-        <td>${esc(v.phone) || '—'}</td>
+      <tr class="${!v.active?'row-archived':''}">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openVolunteerEdit('${v.id}')">
+            <div style="width:30px;height:30px;border-radius:50%;background:${col.hbg};color:${col.txt};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${esc(initialsOf(v.name))}</div>
+            <div>
+              <div class="td-name" style="color:var(--accent)">${esc(v.name)}</div>
+              ${!v.active ? '<span class="badge b-archived">Archived</span>' : ''}
+            </div>
+          </div>
+        </td>
+        <td>${v.phone ? `<a href="tel:${esc(v.phone)}" onclick="event.stopPropagation()" style="color:var(--text);text-decoration:none">${esc(v.phone)}</a>` : '—'}</td>
         <td>${v.zones ? `<span class="chip">${esc(v.zones.name)}</span>` : '—'}</td>
-        <td>${st.deliveries}</td>
-        <td>${st.lastActive ? fmt(st.lastActive.slice(0,10)) : '—'}</td>
+        <td>${st.deliveries > 0 ? `<strong>${st.deliveries}</strong>` : '<span style="color:var(--text-muted)">— new</span>'}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${st.lastActive ? fmt(st.lastActive.slice(0,10)) : '—'}</td>
+        <td>
+          <div class="act-wrap">
+            <button class="act-trigger" onclick="event.stopPropagation();toggleMenu('${v.id}')">⋯</button>
+            <div class="act-menu" id="menu-${v.id}">
+              <button class="act-item" onclick="closeMenus();openVolunteerEdit('${v.id}')">✏ Edit</button>
+              ${v.active
+                ? `<button class="act-item" onclick="closeMenus();archiveVolunteer('${v.id}')">🚫 Archive</button>`
+                : `<button class="act-item" onclick="closeMenus();reactivateVolunteer('${v.id}')">↩ Reactivate</button>`}
+              <div class="act-divider"></div>
+              <button class="act-item danger" onclick="closeMenus();deleteVolunteer('${v.id}')">🗑 Delete</button>
+            </div>
+          </div>
+        </td>
       </tr>
     `;
   }).join('');
+}
+
+async function archiveVolunteer(id) {
+  const v = volunteersCache.find(x => x.id === id);
+  if (!v) return;
+  const { error } = await sb.from('volunteers').update({ active: false }).eq('id', id);
+  if (error) { console.error(error); toast(`⚠️ Couldn't archive: ${error.message}`); return; }
+  await logAudit('Volunteer archived', v.name);
+  await renderVolunteersTab();
+  toast(`🚫 ${v.name} archived.`, 'info');
+}
+
+async function reactivateVolunteer(id) {
+  const v = volunteersCache.find(x => x.id === id);
+  if (!v) return;
+  const { error } = await sb.from('volunteers').update({ active: true }).eq('id', id);
+  if (error) { console.error(error); toast(`⚠️ Couldn't reactivate: ${error.message}`); return; }
+  await logAudit('Volunteer reactivated', v.name);
+  await renderVolunteersTab();
+  toast(`↩ ${v.name} reactivated.`, 'info');
+}
+
+async function deleteVolunteer(id) {
+  const v = volunteersCache.find(x => x.id === id);
+  if (!v) return;
+  const hasHistory = volunteerSessionsCache.some(s => s.volunteer_id === id);
+  if (hasHistory) {
+    showAlertModal('Can’t delete this volunteer', `<p><strong>${esc(v.name)}</strong> has delivery history on record, so deleting them would break that history.</p><p style="margin-top:10px">Use <strong>Archive</strong> instead — it hides them from the active roster but keeps their past deliveries intact.</p>`);
+    return;
+  }
+  if (!confirm(`Permanently delete ${v.name}? This can't be undone.`)) return;
+  const { error } = await sb.from('volunteers').delete().eq('id', id);
+  if (error) { console.error(error); toast(`⚠️ Couldn't delete: ${error.message}`); return; }
+  await logAudit('Volunteer deleted', v.name);
+  await renderVolunteersTab();
+  toast(`🗑 ${v.name} deleted.`, 'info');
 }
 
 async function submitAddVolunteer() {
@@ -1358,7 +1453,8 @@ function openVolunteerEdit(id) {
   $('editVolName').value = v.name;
   $('editVolPhone').value = v.phone || '';
   $('editVolZone').value = v.zones ? v.zones.name : '';
-  $('editVolActive').value = String(v.active);
+  const st = volunteerSessionStats[v.name] || { deliveries: 0, lastActive: null };
+  $('editVolStats').textContent = `${st.deliveries} deliverie${st.deliveries===1?'':'s'} · Last active ${st.lastActive ? fmt(st.lastActive.slice(0,10)) : 'never'} · ${v.active ? 'Active' : 'Archived'}`;
   openModal('editVolunteer');
 }
 
@@ -1369,13 +1465,12 @@ async function saveVolunteerEdit() {
   if (!name) { toast('⚠️ Name is required.','warn'); return; }
   const phone = $('editVolPhone').value.trim();
   const zoneName = $('editVolZone').value;
-  const active = $('editVolActive').value === 'true';
 
   if (!zonesCache.length) await loadZonesCache();
   const zone = zonesCache.find(z => z.name === zoneName);
 
   const { error } = await sb.from('volunteers').update({
-    name, phone: phone || null, zone_id: zone ? zone.id : null, active,
+    name, phone: phone || null, zone_id: zone ? zone.id : null,
   }).eq('id', v.id);
   if (error) { console.error(error); toast(`⚠️ Couldn't save: ${error.message}`); return; }
 
@@ -2410,6 +2505,13 @@ async function rejectApplication(appId) {
 //  PUBLIC APPLICATION FORM (no login required)
 // ════════════════════════════════════════════
 async function submitApplication() {
+  if ($('applyCompany').value.trim()) {
+    // honeypot tripped — silently pretend it worked instead of tipping off the bot
+    $('applyFormWrap').style.display = 'none';
+    $('applySuccessWrap').style.display = 'block';
+    return;
+  }
+
   const name    = $('applyName').value.trim();
   const phone   = $('applyPhone').value.trim();
   const address = $('applyAddress').value.trim();
@@ -2720,6 +2822,9 @@ const AUDIT_CATEGORIES = {
   'Volunteer added':          'volunteers',
   'Volunteer added to roster':'volunteers',
   'Volunteer updated':        'volunteers',
+  'Volunteer archived':       'volunteers',
+  'Volunteer reactivated':    'volunteers',
+  'Volunteer deleted':        'volunteers',
   'Delivery link created':    'sessions',
   'Delivery session created': 'sessions',
   'Delivery confirmed':       'sessions',
