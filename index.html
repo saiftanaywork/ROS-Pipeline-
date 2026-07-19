@@ -1459,12 +1459,41 @@ async function deleteVolunteer(id) {
     showAlertModal('Can’t delete this volunteer', `<p><strong>${esc(v.name)}</strong> has delivery history on record, so deleting them would break that history.</p><p style="margin-top:10px">Use <strong>Archive</strong> instead — it hides them from the active roster but keeps their past deliveries intact.</p>`);
     return;
   }
-  if (!confirm(`Permanently delete ${v.name}? This can't be undone.`)) return;
+  if (!confirm(`Delete ${v.name}? They'll be removed from the roster, but you'll be able to recover them from the Audit Log if this was a mistake.`)) return;
+
+  const snapshotFields = { name: v.name, phone: v.phone, zone_name: v.zones ? v.zones.name : null, active: v.active };
+  const { data: snap, error: snapErr } = await sb.from('volunteer_deletion_snapshots')
+    .insert({ volunteer_id: id, snapshot: snapshotFields, deleted_by: currentUser ? currentUser.name : 'System' })
+    .select('id').single();
+  if (snapErr) { console.error(snapErr); toast(`⚠️ Couldn't delete: ${snapErr.message}`); return; }
+
   const { error } = await sb.from('volunteers').delete().eq('id', id);
   if (error) { console.error(error); toast(`⚠️ Couldn't delete: ${error.message}`); return; }
-  await logAudit('Volunteer deleted', v.name);
+
+  await logAudit('Volunteer deleted', v.name, snap.id);
   await renderVolunteersTab();
-  toast(`🗑 ${v.name} deleted.`, 'info');
+  toast(`🗑 ${v.name} deleted. Recoverable from the Audit Log.`, 'info');
+}
+
+async function recoverVolunteer(snapshotId) {
+  const { data: snap, error: fetchErr } = await sb.from('volunteer_deletion_snapshots').select('*').eq('id', snapshotId).single();
+  if (fetchErr || !snap) { console.error(fetchErr); toast(`⚠️ Couldn't find that deleted record.`, 'warn'); return; }
+  if (snap.restored) { toast(`Already recovered.`, 'info'); return; }
+
+  if (!zonesCache.length) await loadZonesCache();
+  const s = snap.snapshot;
+  const zone = zonesCache.find(z => z.name === s.zone_name);
+
+  const { error: insertErr } = await sb.from('volunteers').insert({
+    name: s.name, phone: s.phone, zone_id: zone ? zone.id : null, active: s.active,
+  });
+  if (insertErr) { console.error(insertErr); toast(`⚠️ Couldn't recover: ${insertErr.message}`); return; }
+
+  await sb.from('volunteer_deletion_snapshots').update({ restored: true, restored_at: new Date().toISOString() }).eq('id', snapshotId);
+  await logAudit('Volunteer recovered', s.name);
+  await renderVolunteersTab();
+  await renderAudit();
+  toast(`↩ ${s.name} recovered.`, 'info');
 }
 
 async function submitAddVolunteer() {
@@ -3098,6 +3127,7 @@ const AUDIT_CATEGORIES = {
   'Volunteer archived':       'volunteers',
   'Volunteer reactivated':    'volunteers',
   'Volunteer deleted':        'volunteers',
+  'Volunteer recovered':      'volunteers',
   'Volunteer bulk import':    'volunteers',
   'Delivery link created':    'sessions',
   'Delivery session created': 'sessions',
@@ -3114,12 +3144,14 @@ function setAuditFilter(f, btn) {
 }
 
 let deletionSnapshots = {}; // snapshot id -> restored boolean, for the Audit Log "Recover" button
+const RECOVER_FN_BY_ACTION = { 'Household deleted': 'recoverHousehold', 'Volunteer deleted': 'recoverVolunteer' };
 
 async function renderAudit() {
   $('auditContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
-  const [{ data, error }, { data: snaps }] = await Promise.all([
+  const [{ data, error }, { data: hSnaps }, { data: vSnaps }] = await Promise.all([
     sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(200),
     sb.from('household_deletion_snapshots').select('id, restored'),
+    sb.from('volunteer_deletion_snapshots').select('id, restored'),
   ]);
   if (error) {
     console.error(error);
@@ -3128,7 +3160,7 @@ async function renderAudit() {
   }
   auditLog = data || [];
   deletionSnapshots = {};
-  (snaps || []).forEach(s => { deletionSnapshots[s.id] = s.restored; });
+  [...(hSnaps || []), ...(vSnaps || [])].forEach(s => { deletionSnapshots[s.id] = s.restored; });
   renderAuditList();
 }
 
@@ -3139,7 +3171,8 @@ function renderAuditList() {
     return;
   }
   $('auditContainer').innerHTML = rows.map(a => {
-    const snapStatus = a.action === 'Household deleted' && a.ref_id ? deletionSnapshots[a.ref_id] : undefined;
+    const recoverFn = RECOVER_FN_BY_ACTION[a.action];
+    const snapStatus = recoverFn && a.ref_id ? deletionSnapshots[a.ref_id] : undefined;
     return `
     <div class="audit-item">
       <div class="audit-dot"></div>
@@ -3148,7 +3181,7 @@ function renderAuditList() {
         <div class="audit-detail">${esc(a.detail)||''}</div>
         <div class="audit-meta">${esc(a.user_name)} · ${fmtDateTime(a.created_at)}</div>
       </div>
-      ${snapStatus === false ? `<button class="btn btn-sm btn-ghost" style="align-self:center;white-space:nowrap" onclick="recoverHousehold('${a.ref_id}')">↩ Recover</button>` : ''}
+      ${snapStatus === false ? `<button class="btn btn-sm btn-ghost" style="align-self:center;white-space:nowrap" onclick="${recoverFn}('${a.ref_id}')">↩ Recover</button>` : ''}
       ${snapStatus === true ? `<span class="badge b-active" style="align-self:center;white-space:nowrap">✓ Recovered</span>` : ''}
     </div>
   `;
