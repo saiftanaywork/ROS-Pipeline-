@@ -128,6 +128,7 @@ tr.row-archived td{opacity:.6}
 .act-trigger:hover{background:var(--border)}
 .act-menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-md);min-width:160px;z-index:300;overflow:hidden;display:none}
 .act-menu.open{display:block}
+.act-menu.open-up{top:auto;bottom:calc(100% + 4px)}
 .act-item{display:flex;align-items:center;gap:9px;padding:9px 14px;font-size:13px;color:var(--text);cursor:pointer;transition:background .1s;border:none;background:none;width:100%;text-align:left}
 .act-item:hover{background:var(--surface-2)}
 .act-item.danger{color:var(--danger)}.act-item.danger:hover{background:var(--danger-bg)}
@@ -1839,7 +1840,7 @@ function renderTable() {
               <button class="act-item" onclick="closeMenus();openRestore(${h.id})">↩ Restore to Active</button>
             `}
             <div class="act-divider"></div>
-            <button class="act-item danger" onclick="closeMenus()">🗑 Delete</button>
+            <button class="act-item danger" onclick="closeMenus();deleteHousehold(${h.id})">🗑 Delete</button>
           </div>
         </div>
       </td>
@@ -1882,8 +1883,21 @@ function updateSortIndicators() {
   });
 }
 
-function toggleMenu(id) { closeMenus(); $(`menu-${id}`).classList.toggle('open'); }
-function closeMenus()   { document.querySelectorAll('.act-menu.open').forEach(m => m.classList.remove('open')); }
+function toggleMenu(id) {
+  const menu = $(`menu-${id}`);
+  const wasOpen = menu.classList.contains('open');
+  closeMenus();
+  if (wasOpen) return;
+  menu.classList.add('open');
+  menu.classList.remove('open-up');
+  // Flip the menu to open upward instead of down if it would otherwise
+  // render past the bottom of the viewport — avoids forcing a page scroll
+  // just to see the options on rows near the bottom of a long table.
+  if (menu.getBoundingClientRect().bottom > window.innerHeight - 8) {
+    menu.classList.add('open-up');
+  }
+}
+function closeMenus() { document.querySelectorAll('.act-menu.open').forEach(m => m.classList.remove('open', 'open-up')); }
 document.addEventListener('click', e => { if (!e.target.closest('.act-wrap')) closeMenus(); });
 
 function renderStats() {
@@ -1965,6 +1979,33 @@ async function confirmRestore() {
   if (profileHouseholdId === h.id) renderProfile();
   renderAll();
   toast(`↩ ${h.name} restored to active.`,'info');
+}
+
+async function deleteHousehold(id) {
+  const h = households.find(x => x.id === id);
+  if (!h) return;
+
+  // household_applications.converted_household_id / possible_duplicate_of
+  // reference households with NO ACTION (not cascade) — deleting would fail
+  // and confuse whoever's clicking, so check first and explain instead.
+  const { data: linkedApps } = await sb.from('household_applications')
+    .select('id')
+    .or(`converted_household_id.eq.${h.dbId},possible_duplicate_of.eq.${h.dbId}`);
+  if (linkedApps && linkedApps.length) {
+    showAlertModal('Can’t delete this household', `<p><strong>${esc(h.name)}</strong> is linked to an application record, so deleting it would break that history.</p><p style="margin-top:10px">Use <strong>Remove from Routes</strong> instead — it keeps the record on file but takes them off active delivery routes.</p>`);
+    return;
+  }
+
+  if (!confirm(`Permanently delete ${h.name}? This can't be undone.`)) return;
+
+  const { error } = await sb.from('households').delete().eq('id', h.dbId);
+  if (error) { console.error(error); toast(`⚠️ Couldn't delete: ${error.message}`); return; }
+
+  await logAudit('Household deleted', h.name);
+  if (profileHouseholdId === h.id) closeProfile();
+  await loadHouseholdsFromSupabase();
+  renderAll();
+  toast(`🗑 ${h.name} deleted.`, 'info');
 }
 
 async function addHousehold() {
@@ -3000,6 +3041,7 @@ const AUDIT_CATEGORIES = {
   'Families graduated (bulk)':'households',
   'Families archived (bulk)': 'households',
   'Household restored':       'households',
+  'Household deleted':        'households',
   'Households restored (bulk)':'households',
   'Field updated':            'households',
   'Visit note added':         'households',
