@@ -745,11 +745,6 @@ tr.row-archived td{opacity:.6}
           <button class="btn btn-primary" onclick="openModal('addVolunteer')">+ Add Volunteer</button>
         </div>
       </div>
-      <div class="filter-bar">
-        <button class="f-btn on" data-volfilter="all" onclick="setVolFilter('all',this)">All</button>
-        <button class="f-btn" data-volfilter="active" onclick="setVolFilter('active',this)">Active</button>
-        <button class="f-btn" data-volfilter="archived" onclick="setVolFilter('archived',this)">Archived</button>
-      </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Volunteer</th><th>Phone</th><th>Zone</th><th>Deliveries</th><th>Last Active</th><th></th></tr></thead>
@@ -1154,7 +1149,6 @@ let activeFilter   = 'all';
 let tableSort      = { col: null, dir: 1 };
 let selectedHouseholdIds = new Set();
 let bulkRemoveIds = null; // set while the "remove" modal is being used in bulk mode
-let volFilter = 'all';
 let volunteerSessionStats = {};  // { [volunteerName]: { deliveries, lastActive } }, refreshed on each render
 let volunteerSessionsCache = []; // raw delivery_sessions rows, used to gate hard-delete
 let activeThreshold = 0.012;
@@ -1349,13 +1343,6 @@ async function loadSuggestedEdits() {
   suggestedEdits.sort((a, b) => (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0));
 }
 
-function setVolFilter(f, btn) {
-  volFilter = f;
-  document.querySelectorAll('[data-volfilter]').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  renderVolunteersTab();
-}
-
 function initialsOf(name) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
@@ -1384,14 +1371,12 @@ async function renderVolunteersTab() {
   });
   volunteerSessionStats = statsByName;
 
-  if (!volunteersCache.length) {
-    $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No volunteers yet — add one, or they'll appear here automatically after their first delivery session.</td></tr>`;
-    return;
-  }
-
-  const rows = volunteersCache.filter(v => volFilter === 'all' ? true : volFilter === 'active' ? v.active : !v.active);
+  // Archived volunteers are hidden here entirely rather than greyed out in the
+  // list — with hundreds of volunteers that clutters the table fast. Archiving
+  // logs to the Audit Log instead, with a Reactivate action right there.
+  const rows = volunteersCache.filter(v => v.active);
   if (!rows.length) {
-    $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No ${volFilter} volunteers.</td></tr>`;
+    $('volunteersTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No volunteers yet — add one, or they'll appear here automatically after their first delivery session.</td></tr>`;
     return;
   }
 
@@ -1399,14 +1384,11 @@ async function renderVolunteersTab() {
     const st = statsByName[v.name] || { deliveries: 0, lastActive: null };
     const col = avatarColor(v.name);
     return `
-      <tr class="${!v.active?'row-archived':''}">
+      <tr>
         <td>
           <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openVolunteerEdit('${v.id}')">
             <div style="width:30px;height:30px;border-radius:50%;background:${col.hbg};color:${col.txt};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${esc(initialsOf(v.name))}</div>
-            <div>
-              <div class="td-name" style="color:var(--accent)">${esc(v.name)}</div>
-              ${!v.active ? '<span class="badge b-archived">Archived</span>' : ''}
-            </div>
+            <div class="td-name" style="color:var(--accent)">${esc(v.name)}</div>
           </div>
         </td>
         <td>${v.phone ? `<a href="tel:${esc(v.phone)}" onclick="event.stopPropagation()" style="color:var(--text);text-decoration:none">${esc(v.phone)}</a>` : '—'}</td>
@@ -1418,9 +1400,7 @@ async function renderVolunteersTab() {
             <button class="act-trigger" onclick="event.stopPropagation();toggleMenu('${v.id}')">⋯</button>
             <div class="act-menu" id="menu-${v.id}">
               <button class="act-item" onclick="closeMenus();openVolunteerEdit('${v.id}')">✏ Edit</button>
-              ${v.active
-                ? `<button class="act-item" onclick="closeMenus();archiveVolunteer('${v.id}')">🚫 Archive</button>`
-                : `<button class="act-item" onclick="closeMenus();reactivateVolunteer('${v.id}')">↩ Reactivate</button>`}
+              <button class="act-item" onclick="closeMenus();archiveVolunteer('${v.id}')">🚫 Archive</button>
               <div class="act-divider"></div>
               <button class="act-item danger" onclick="closeMenus();deleteVolunteer('${v.id}')">🗑 Delete</button>
             </div>
@@ -1436,18 +1416,22 @@ async function archiveVolunteer(id) {
   if (!v) return;
   const { error } = await sb.from('volunteers').update({ active: false }).eq('id', id);
   if (error) { console.error(error); toast(`⚠️ Couldn't archive: ${error.message}`); return; }
-  await logAudit('Volunteer archived', v.name);
+  await logAudit('Volunteer archived', v.name, id);
   await renderVolunteersTab();
-  toast(`🚫 ${v.name} archived.`, 'info');
+  toast(`🚫 ${v.name} archived. Reactivate from the Audit Log.`, 'info');
 }
 
+// Fetches fresh from Supabase rather than relying on volunteersCache, since
+// this is also called directly from the Audit Log's Reactivate button, where
+// the Volunteers tab (and its cache) may never have been loaded this session.
 async function reactivateVolunteer(id) {
-  const v = volunteersCache.find(x => x.id === id);
-  if (!v) return;
+  const { data: v, error: fetchErr } = await sb.from('volunteers').select('name').eq('id', id).single();
+  if (fetchErr || !v) { console.error(fetchErr); toast(`⚠️ Couldn't find that volunteer.`, 'warn'); return; }
   const { error } = await sb.from('volunteers').update({ active: true }).eq('id', id);
   if (error) { console.error(error); toast(`⚠️ Couldn't reactivate: ${error.message}`); return; }
   await logAudit('Volunteer reactivated', v.name);
   await renderVolunteersTab();
+  await renderAudit();
   toast(`↩ ${v.name} reactivated.`, 'info');
 }
 
@@ -3143,15 +3127,21 @@ function setAuditFilter(f, btn) {
   renderAuditList();
 }
 
-let deletionSnapshots = {}; // snapshot id -> restored boolean, for the Audit Log "Recover" button
-const RECOVER_FN_BY_ACTION = { 'Household deleted': 'recoverHousehold', 'Volunteer deleted': 'recoverVolunteer' };
+let deletionSnapshots = {}; // ref_id -> "already undone" boolean, for the Audit Log's undo button
+// Per action: which function undoes it, and what to call the button/badge once used.
+const UNDO_ACTIONS = {
+  'Household deleted': { fn: 'recoverHousehold',   label: 'Recover',    doneLabel: 'Recovered' },
+  'Volunteer deleted':  { fn: 'recoverVolunteer',   label: 'Recover',    doneLabel: 'Recovered' },
+  'Volunteer archived': { fn: 'reactivateVolunteer', label: 'Reactivate', doneLabel: 'Reactivated' },
+};
 
 async function renderAudit() {
   $('auditContainer').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Loading…</div>`;
-  const [{ data, error }, { data: hSnaps }, { data: vSnaps }] = await Promise.all([
+  const [{ data, error }, { data: hSnaps }, { data: vSnaps }, { data: vols }] = await Promise.all([
     sb.from('audit_log').select('*').order('created_at', {ascending:false}).limit(200),
     sb.from('household_deletion_snapshots').select('id, restored'),
     sb.from('volunteer_deletion_snapshots').select('id, restored'),
+    sb.from('volunteers').select('id, active'),
   ]);
   if (error) {
     console.error(error);
@@ -3161,6 +3151,9 @@ async function renderAudit() {
   auditLog = data || [];
   deletionSnapshots = {};
   [...(hSnaps || []), ...(vSnaps || [])].forEach(s => { deletionSnapshots[s.id] = s.restored; });
+  // "Volunteer archived" entries reuse the same map, keyed by the volunteer's own id —
+  // active:false means still archived (undo not done yet), active:true means reactivated.
+  (vols || []).forEach(v => { deletionSnapshots[v.id] = v.active; });
   renderAuditList();
 }
 
@@ -3171,8 +3164,8 @@ function renderAuditList() {
     return;
   }
   $('auditContainer').innerHTML = rows.map(a => {
-    const recoverFn = RECOVER_FN_BY_ACTION[a.action];
-    const snapStatus = recoverFn && a.ref_id ? deletionSnapshots[a.ref_id] : undefined;
+    const undo = UNDO_ACTIONS[a.action];
+    const status = undo && a.ref_id ? deletionSnapshots[a.ref_id] : undefined;
     return `
     <div class="audit-item">
       <div class="audit-dot"></div>
@@ -3181,8 +3174,8 @@ function renderAuditList() {
         <div class="audit-detail">${esc(a.detail)||''}</div>
         <div class="audit-meta">${esc(a.user_name)} · ${fmtDateTime(a.created_at)}</div>
       </div>
-      ${snapStatus === false ? `<button class="btn btn-sm btn-ghost" style="align-self:center;white-space:nowrap" onclick="${recoverFn}('${a.ref_id}')">↩ Recover</button>` : ''}
-      ${snapStatus === true ? `<span class="badge b-active" style="align-self:center;white-space:nowrap">✓ Recovered</span>` : ''}
+      ${status === false ? `<button class="btn btn-sm btn-ghost" style="align-self:center;white-space:nowrap" onclick="${undo.fn}('${a.ref_id}')">↩ ${undo.label}</button>` : ''}
+      ${status === true ? `<span class="badge b-active" style="align-self:center;white-space:nowrap">✓ ${undo.doneLabel}</span>` : ''}
     </div>
   `;
   }).join('');
